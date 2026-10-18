@@ -42,3 +42,7 @@ npm run dist      # PyInstaller backend -> src-tauri/binaries/, pa tauri build (
 
 Skidanje tuđe glazbe s YouTubea krši YouTube ToS i, ovisno o sadržaju, autorska prava.
 Koristi za vlastiti sadržaj ili tamo gdje je to dopušteno.
+
+## Licenca
+
+MIT, vidi [LICENSE](LICENSE).

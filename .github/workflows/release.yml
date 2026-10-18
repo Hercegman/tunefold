@@ -52,11 +52,11 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
-      - name: Build backend sidecar (PyInstaller)
+      - name: Build sidecars (PyInstaller backend, static ffmpeg + ffprobe)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt pyinstaller
-          python scripts/build_backend.py
+          python scripts/build_sidecars.py
 
       - name: Build app and publish to GitHub Release
         uses: tauri-apps/tauri-action@v0
@@ -67,6 +67,6 @@ jobs:
           releaseName: "Tunefold ${{ github.ref_name }}"
           releaseBody: |
             Desktop builds for Linux (.deb, .AppImage, .rpm), macOS (.dmg) and Windows (.msi, .exe).
-            ffmpeg must be installed and on PATH.
+            ffmpeg and ffprobe are bundled; nothing else to install.
           releaseDraft: true
           prerelease: false

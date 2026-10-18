@@ -1,14 +1,15 @@
 """Smart artist folding.
 
-Problem: Spotify credits the same band differently across albums ("Majke" vs
-"Goran Bare, Majke", "Bijelo Dugme" vs "Bijelo dugme"). Anyone who sorts a
-collection alphabetically ends up with one band scattered over several places.
+Problem: Spotify credits the same artist differently across albums ("Silk Sonic"
+vs "Bruno Mars, Anderson .Paak, Silk Sonic", "Beyoncé" vs "Beyonce"). Anyone who
+sorts a collection alphabetically ends up with one artist scattered over several
+places.
 
 The solution works purely with names as the user sees them:
   1. name key = no diacritics, no punctuation, casefolded, leading "the" dropped
   2. same key, different spelling      -> unify on the most common spelling
   3. credit A is a proper subset of B  -> suggest folding under the WIDER name
-     ("Majke" -> "Goran Bare, Majke")
+     ("Silk Sonic" -> "Bruno Mars, Anderson .Paak, Silk Sonic")
   4. exception: "(feat. X)" in the title. X is not a co-equal artist, so the
      track goes under the primary artist rather than "Primary, X".
 Everything is only a suggestion: the user confirms, renames or rejects, and the
@@ -166,7 +167,7 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
             reason="A guest from the title (feat.) is not a co-equal artist; the track goes under the primary one.",
         ))
 
-    # 6. subset -> superset: "Majke" -> "Goran Bare, Majke"
+    # 6. subset -> superset: "Silk Sonic" -> "Bruno Mars, Anderson .Paak, Silk Sonic"
     keysets = list(groups)
     maximal = [ks for ks in keysets if not any(ks < other for other in keysets)]
     merged_into: dict[frozenset, list[frozenset]] = defaultdict(list)
@@ -201,16 +202,16 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
 
 if __name__ == "__main__":  # small smoke test
     demo = [
-        TrackCredit("1", "Teške boje", ["Majke"]),
-        TrackCredit("2", "Budi ponosan", ["Goran Bare", "Majke"]),
-        TrackCredit("3", "Ljubav je kao ljetna kiša", ["Goran Bare", "Majke"]),
-        TrackCredit("4", "Ja sam budućnost", ["Goran Bare"]),
-        TrackCredit("5", "Zar je ljubav spala na to", ["Bijelo Dugme"]),
-        TrackCredit("6", "Lipe cvatu", ["Bijelo dugme"]),
+        TrackCredit("1", "Smokin Out The Window", ["Silk Sonic"]),
+        TrackCredit("2", "Leave the Door Open", ["Bruno Mars", "Anderson .Paak", "Silk Sonic"]),
+        TrackCredit("3", "Skate", ["Bruno Mars", "Anderson .Paak", "Silk Sonic"]),
+        TrackCredit("4", "24K Magic", ["Bruno Mars"]),
+        TrackCredit("5", "Halo", ["Beyoncé"]),
+        TrackCredit("6", "Crazy In Love", ["Beyonce"]),
         TrackCredit("7", "expectations (feat. Chappell Roan)", ["Olivia Rodrigo", "Chappell Roan"]),
         TrackCredit("8", "vampire", ["Olivia Rodrigo"]),
-        TrackCredit("9", "Mrak", ["Prljavo Kazalište"]),
-        TrackCredit("10", "Heroj ulice", ["Prljavo kazalište"]),
+        TrackCredit("9", "I Write Sins Not Tragedies", ["Panic! At The Disco"]),
+        TrackCredit("10", "High Hopes", ["Panic at the Disco"]),
     ]
     import json
     print(json.dumps(analyze(demo), ensure_ascii=False, indent=1))

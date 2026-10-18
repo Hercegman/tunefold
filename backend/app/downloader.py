@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import threading
 import unicodedata
 from dataclasses import dataclass
@@ -33,6 +34,21 @@ class Cancelled(Exception):
 
 
 def ffmpeg_path() -> str | None:
+    """Location handed to yt-dlp (`ffmpeg_location`): a directory holding the
+    bundled ffmpeg/ffprobe sidecars when present, otherwise the ffmpeg found
+    on PATH. Resolution order:
+      1. TUNEFOLD_FFMPEG env var (a binary or a directory)
+      2. ffmpeg next to this executable (Tauri installs sidecars side by side)
+      3. PATH
+    """
+    exe = ".exe" if sys.platform == "win32" else ""
+    override = os.environ.get("TUNEFOLD_FFMPEG")
+    if override and os.path.exists(override):
+        return override
+    if getattr(sys, "frozen", False):
+        here = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.exists(os.path.join(here, f"ffmpeg{exe}")):
+            return here
     return shutil.which("ffmpeg")
 
 

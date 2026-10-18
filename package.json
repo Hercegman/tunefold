@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:backend": "backend/.venv/bin/python backend/run.py --port 8765 -v",
-    "build:backend": "backend/.venv/bin/python scripts/build_backend.py",
-    "dist": "npm run build:backend && tauri build"
+    "dist": "npm run build:sidecars && tauri build",
+    "build:sidecars": "backend/.venv/bin/python scripts/build_sidecars.py"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
@@ -30,6 +30,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",

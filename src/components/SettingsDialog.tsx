@@ -19,7 +19,7 @@ export function SettingsDialog({ settings, onChange, onClose }: { settings: Sett
 
   const save = async () => { onChange(await api.saveSettings(s)); onClose() }
   const preview = (() => {
-    const a = 'Goran Bare, Majke', t = 'Teške boje', ext = s.format
+    const a = 'Silk Sonic', t = 'Leave the Door Open', ext = s.format
     const stem = s.naming === 'artist-title' ? `${a} - ${t}` : s.naming === 'title-artist' ? `${t} - ${a}` : t
     return `${s.track_numbers ? '07. ' : ''}${stem}.${ext}`
   })()

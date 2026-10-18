@@ -21,10 +21,10 @@
 
 ## Why Tunefold
 
-Spotify credits the same band differently from album to album. Some songs are
-filed under **Majke**, others under **Goran Bare, Majke**. Some under **Bijelo
-Dugme**, others under **Bijelo dugme**. A guest on one track turns
-**Olivia Rodrigo** into **Olivia Rodrigo, Chappell Roan**.
+Spotify credits the same artist differently from album to album. Some songs are
+filed under **Silk Sonic**, others under **Bruno Mars, Anderson .Paak, Silk
+Sonic**. Some under **Beyoncé**, others under **Beyonce**. A guest on one track
+turns **Olivia Rodrigo** into **Olivia Rodrigo, Chappell Roan**.
 
 Download that playlist with any ordinary tool and your library, sorted by
 artist, is scattered across three folders for one band.
@@ -44,9 +44,9 @@ The decision is remembered and applied to every playlist after that.
 - **Smart artist folding.** Four kinds of suggestions, all driven by the names people actually see:
   | Kind | Example | Rule |
   | :--- | :--- | :--- |
-  | Fold | `Majke` → `Goran Bare, Majke` | a narrower credit is part of a wider one, so everything goes under the wider name (the reverse is one click away) |
+  | Fold | `Silk Sonic` → `Bruno Mars, Anderson .Paak, Silk Sonic` | a narrower credit is part of a wider one, so everything goes under the wider name (the reverse is one click away) |
   | Guest | `Olivia Rodrigo, Chappell Roan` → `Olivia Rodrigo` | a `(feat. X)` in the title is a guest, not a co-equal artist |
-  | Spelling | `Bijelo dugme` → `Bijelo Dugme` | same name, different case, diacritics or punctuation |
+  | Spelling | `Beyonce` → `Beyoncé`, `Panic at the Disco` → `Panic! At The Disco` | same name, different case, diacritics or punctuation |
   | Saved rule | applied automatically | a decision you made on an earlier playlist |
 - **Correct tags, everywhere.** Title, artist, album artist, album, year, track number and front cover, written as ID3v2.3 for MP3 so car head units and old players read them too. The original Spotify credit is kept in a separate tag, so nothing is lost.
 - **Accurate matching.** The YouTube upload is chosen by title, artist and duration, not by the first hit. Live versions, remixes and sped-up edits are rejected.
@@ -80,7 +80,7 @@ flowchart LR
 
 ## Quick start
 
-Prerequisites: [Node 20+](https://nodejs.org), [Rust](https://rustup.rs), Python 3.10+, `ffmpeg` on your PATH.
+Prerequisites: [Node 20+](https://nodejs.org), [Rust](https://rustup.rs), Python 3.10+. For `./dev.sh` you also need `ffmpeg` on your PATH; release builds bundle their own.
 
 ```bash
 git clone https://github.com/hercegman/tunefold.git
@@ -102,10 +102,12 @@ python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/require
 npm run dist
 ```
 
-This packages the Python backend into a single binary with PyInstaller, places it
-in `src-tauri/binaries/` as a Tauri sidecar, and builds the desktop bundles
-(`.deb`, AppImage and `.rpm` on Linux). The app starts the backend itself and
-shuts it down with the window.
+This prepares the three sidecars in `src-tauri/binaries/` (the Python backend
+packaged with PyInstaller, plus static `ffmpeg` and `ffprobe` from the
+`ffmpeg-static` and `ffprobe-static` npm packages) and builds the desktop
+bundles (`.deb`, AppImage and `.rpm` on Linux, `.dmg` on macOS, `.msi` and
+`.exe` on Windows). The app starts the backend itself and shuts it down with the
+window. Nothing has to be installed on the user's machine.
 
 ## Releases
 
@@ -120,8 +122,7 @@ git tag v0.2.0 && git push && git push --tags
 ```
 
 When the `Release` workflow finishes, open the draft on the Releases page,
-check the assets and publish it. `ffmpeg` is not bundled yet, so it has to be
-on the user's PATH.
+check the assets and publish it.
 
 ## Architecture
 
@@ -141,7 +142,7 @@ server-sent events, one per state change, so the window never polls.
 
 ## Roadmap
 
-- [ ] App icon and signed release builds for Linux, macOS and Windows
+- [ ] Signed and notarized release builds
 - [ ] Import an existing music folder and run it through artist folding
 - [ ] Per-track cover art in the preview
 - [ ] Lyrics and `.lrc` files
@@ -155,4 +156,6 @@ only for content you have the right to download.
 
 ## License
 
-[MIT](LICENSE)
+Tunefold is [MIT](LICENSE). The bundled `ffmpeg` and `ffprobe` binaries come
+from the `ffmpeg-static` and `ffprobe-static` packages and are licensed under
+the GPL; they are shipped unmodified as separate executables.

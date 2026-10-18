@@ -49,7 +49,7 @@ class PreviewIn(BaseModel):
 
 
 class AliasIn(BaseModel):
-    credit: str          # original credit, e.g. "Majke"
+    credit: str          # original credit, e.g. "Silk Sonic"
     to: str              # canonical name
 
 

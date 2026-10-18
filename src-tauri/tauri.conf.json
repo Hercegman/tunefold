@@ -39,7 +39,9 @@
       "debugApplicationIdSuffix": ".debug"
     },
     "externalBin": [
-      "binaries/backend"
+      "binaries/backend",
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
     ]
   }
 }

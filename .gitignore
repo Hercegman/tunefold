@@ -2,7 +2,7 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/
-src-tauri/binaries/backend-*
+src-tauri/binaries/*
 backend/.venv/
 backend/build/
 backend/dist/

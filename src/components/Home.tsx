@@ -25,8 +25,8 @@ export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => voi
       <div className="flex flex-col items-center gap-3 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15 text-accent"><Music2 size={28} /></div>
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Tunefold</div>
-        <h1 className="text-3xl font-semibold tracking-tight">Zalijepi Spotify link</h1>
-        <p className="max-w-md text-sm text-muted">Playlista, album ili pjesma. Prvo dobiješ pregled i prijedloge za uredne izvođače, pa biraš što skidaš.</p>
+        <h1 className="text-3xl font-semibold tracking-tight">Paste a Spotify link</h1>
+        <p className="max-w-md text-sm text-muted">A playlist, album or track. You get a preview and artist clean-up suggestions first, then pick what to download.</p>
       </div>
 
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (url.trim()) onSubmit(url.trim()) }}>
@@ -35,13 +35,13 @@ export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => voi
           <input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://open.spotify.com/playlist/…"
             className={`${inputCls} py-3 pl-9 text-base`} />
         </div>
-        <Button type="submit" variant="primary" loading={busy} className="px-5">Pregledaj <ArrowRight size={16} /></Button>
+        <Button type="submit" variant="primary" loading={busy} className="px-5">Preview <ArrowRight size={16} /></Button>
       </form>
       {error && <div className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
 
       {recent.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><Clock size={14} /> Nedavno</h2>
+          <h2 className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><Clock size={14} /> Recent</h2>
           <div className="grid gap-2 sm:grid-cols-2">
             {recent.map((r) => (
               <button key={r.url} onClick={() => onSubmit(r.url)} disabled={busy}
@@ -49,7 +49,7 @@ export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => voi
                 <Cover url={r.cover_url} size={44} />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{r.name}</div>
-                  <div className="truncate text-xs text-muted">{r.kind === 'album' ? 'Album' : r.kind === 'track' ? 'Pjesma' : 'Playlista'}{r.owner ? ` · ${r.owner}` : ''}{r.total ? ` · ${r.total} pjesama` : ''}</div>
+                  <div className="truncate text-xs text-muted">{r.kind === 'album' ? 'Album' : r.kind === 'track' ? 'Track' : 'Playlist'}{r.owner ? ` · ${r.owner}` : ''}{r.total ? ` · ${r.total} tracks` : ''}</div>
                 </div>
               </button>
             ))}

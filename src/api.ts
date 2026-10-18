@@ -37,7 +37,7 @@ export function jobEvents(id: string, onEvent: (ev: Record<string, unknown>) => 
   es.onmessage = (m) => {
     try { onEvent(JSON.parse(m.data)) } catch { /* ignore */ }
   }
-  es.onerror = () => { /* EventSource se sam reconnecta */ }
+  es.onerror = () => { /* EventSource reconnects on its own */ }
   return () => es.close()
 }
 

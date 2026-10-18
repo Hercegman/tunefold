@@ -1,18 +1,18 @@
-"""Pametno grupiranje izvođača.
+"""Smart artist folding.
 
-Problem: Spotify isti bend kreditira različito po albumima ("Majke" vs
-"Goran Bare, Majke", "Bijelo Dugme" vs "Bijelo dugme"). Tko slaže kolekciju
-po abecedi dobije isti bend raspršen na više mjesta.
+Problem: Spotify credits the same band differently across albums ("Majke" vs
+"Goran Bare, Majke", "Bijelo Dugme" vs "Bijelo dugme"). Anyone who sorts a
+collection alphabetically ends up with one band scattered over several places.
 
-Rješenje radi isključivo s imenima kako ih korisnik vidi:
-  1. ključ imena = bez dijakritika, bez interpunkcije, casefold, bez "the"
-  2. isti ključ, različit zapis  -> ujednači na najčešći zapis (spelling)
-  3. kredit A je pravi podskup kredita B -> predloži spajanje pod ŠIRI naziv
+The solution works purely with names as the user sees them:
+  1. name key = no diacritics, no punctuation, casefolded, leading "the" dropped
+  2. same key, different spelling      -> unify on the most common spelling
+  3. credit A is a proper subset of B  -> suggest folding under the WIDER name
      ("Majke" -> "Goran Bare, Majke")
-  4. iznimka: "(feat. X)" u naslovu. Tada X nije ravnopravan izvođač pa se
-     pjesma vodi pod glavnim izvođačem, a ne pod "Glavni, X".
-Sve je samo prijedlog: korisnik potvrđuje, mijenja ime ili odbija, a odluka se
-pamti kao alias (library.py) i vrijedi za buduće playliste.
+  4. exception: "(feat. X)" in the title. X is not a co-equal artist, so the
+     track goes under the primary artist rather than "Primary, X".
+Everything is only a suggestion: the user confirms, renames or rejects, and the
+decision is stored as an alias (library.py) that applies to future playlists.
 """
 from __future__ import annotations
 
@@ -69,12 +69,12 @@ def credit_key(artists: list[str]) -> str:
 class Suggestion:
     id: str
     kind: str                      # merge | spelling | feat | alias
-    to: str                        # predloženo kanonsko ime
-    sources: list[str]             # originalni krediti koji se spajaju
+    to: str                        # proposed canonical name
+    sources: list[str]             # original credits being folded
     track_ids: list[str]
-    count_to: int                  # koliko pjesama već nosi ciljno ime
+    count_to: int                  # how many tracks already carry the target name
     alternatives: list[str] = field(default_factory=list)
-    applied: bool = False          # true kad dolazi iz spremljenog aliasa
+    applied: bool = False          # true when it comes from a stored alias
     reason: str = ""
 
     def to_dict(self) -> dict:
@@ -89,13 +89,13 @@ class TrackCredit:
 
 
 def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) -> dict:
-    """Vrati {"artist_map": {track_id: ime}, "suggestions": [...]}.
+    """Return {"artist_map": {track_id: name}, "suggestions": [...]}.
 
-    artist_map je ime koje bi se primijenilo kad korisnik prihvati sve
-    predloženo. Frontend ga može izmijeniti po volji prije downloada.
+    artist_map is the name that would apply if the user accepted everything.
+    The frontend may change it freely before downloading.
     """
     aliases = aliases or {}
-    # 1. najčešći zapis po ključu imena
+    # 1. most common spelling per name key
     spellings: dict[str, Counter] = defaultdict(Counter)
     for t in tracks:
         for a in t.artists:
@@ -105,7 +105,7 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
     def display(names: list[str]) -> str:
         return ", ".join(canon_spelling[norm_key(a)] for a in names)
 
-    # 2. efektivni kredit (bez feat.) po pjesmi, grupiran po skupu ključeva
+    # 2. effective credit (without feat.) per track, grouped by key set
     groups: dict[frozenset, list[TrackCredit]] = defaultdict(list)
     eff_names: dict[str, list[str]] = {}
     suggestions: list[Suggestion] = []
@@ -123,7 +123,7 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
             feat_tracks[display(eff)].append(t)
         groups[frozenset(norm_key(a) for a in eff)].append(t)
 
-    # alias prijedlozi (već primijenjeni, samo za prikaz)
+    # alias suggestions (already applied, shown for transparency)
     by_alias: dict[str, list[TrackCredit]] = defaultdict(list)
     for t in tracks:
         if t.id in artist_map:
@@ -133,10 +133,10 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
         suggestions.append(Suggestion(
             id=f"alias:{norm_key(to)}", kind="alias", to=to, sources=srcs,
             track_ids=[t.id for t in ts], count_to=len(ts), applied=True,
-            reason="Spremljeno pravilo iz prethodnih playlisti.",
+            reason="Saved rule from a previous playlist.",
         ))
 
-    # 3. redoslijed imena za prikaz skupa = najčešći Spotify redoslijed
+    # 3. display order of a key set = the most common Spotify order
     def group_display(keyset: frozenset) -> str:
         orders = Counter(display(eff_names[t.id]) for t in groups[keyset])
         return orders.most_common(1)[0][0]
@@ -146,7 +146,7 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
         for t in ts:
             artist_map[t.id] = group_name[ks]
 
-    # 4. spelling prijedlozi: isti ključ, više zapisa
+    # 4. spelling suggestions: same key, several spellings
     for k, c in spellings.items():
         if len(c) > 1:
             to = canon_spelling[k]
@@ -154,19 +154,19 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
             ids = [t.id for t in tracks if any(norm_key(a) == k and a.strip() != to for a in t.artists)]
             suggestions.append(Suggestion(
                 id=f"spelling:{k}", kind="spelling", to=to, sources=others, track_ids=ids,
-                count_to=c[to], reason="Isto ime, različit zapis (velika slova, dijakritici, interpunkcija).",
+                count_to=c[to], reason="Same name, different spelling (case, diacritics, punctuation).",
             ))
 
-    # 5. feat prijedlozi: pjesma s "(feat. X)" ide pod glavnog izvođača
+    # 5. feat suggestions: a track with "(feat. X)" goes under the primary artist
     for to, ts in feat_tracks.items():
         srcs = sorted({", ".join(t.artists) for t in ts})
         suggestions.append(Suggestion(
             id=f"feat:{norm_key(to)}", kind="feat", to=to, sources=srcs,
             track_ids=[t.id for t in ts], count_to=len(groups.get(frozenset(norm_key(a) for a in eff_names[ts[0].id]), [])),
-            reason="Gost iz naslova (feat.) nije ravnopravan izvođač; pjesma ide pod glavnog.",
+            reason="A guest from the title (feat.) is not a co-equal artist; the track goes under the primary one.",
         ))
 
-    # 6. podskup -> nadskup: "Majke" -> "Goran Bare, Majke"
+    # 6. subset -> superset: "Majke" -> "Goran Bare, Majke"
     keysets = list(groups)
     maximal = [ks for ks in keysets if not any(ks < other for other in keysets)]
     merged_into: dict[frozenset, list[frozenset]] = defaultdict(list)
@@ -184,21 +184,22 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
         ids = [t.id for ks in sources for t in groups[ks]]
         for tid in ids:
             artist_map[tid] = to
-        # alternative: obrnuti smjer (sve pod uže ime), plus drugi nadskupovi kad ih ima više
+        # alternatives: the reverse direction (everything under the narrower name),
+        # plus the other supersets when there are several
         alts = sorted({group_name[ks] for ks in sources}
                       | {group_name[m] for ks in sources for m in ambiguous.get(ks, []) if m != target})
         suggestions.append(Suggestion(
             id=f"merge:{credit_key(to.split(', '))}", kind="merge", to=to,
             sources=[group_name[ks] for ks in sources], track_ids=ids,
             count_to=len(groups[target]), alternatives=alts,
-            reason="Uži kredit je dio šireg; sve ide pod šire ime da bude zajedno po abecedi.",
+            reason="The narrower credit is part of the wider one; folding keeps them together alphabetically.",
         ))
 
     suggestions.sort(key=lambda s: ({"alias": 0, "merge": 1, "feat": 2, "spelling": 3}[s.kind], -len(s.track_ids)))
     return {"artist_map": artist_map, "suggestions": [s.to_dict() for s in suggestions]}
 
 
-if __name__ == "__main__":  # mali smoke test
+if __name__ == "__main__":  # small smoke test
     demo = [
         TrackCredit("1", "Teške boje", ["Majke"]),
         TrackCredit("2", "Budi ponosan", ["Goran Bare", "Majke"]),

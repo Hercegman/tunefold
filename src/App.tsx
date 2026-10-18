@@ -66,11 +66,11 @@ export default function App() {
   if (boot !== 'ready' || !settings) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted">
-        {boot === 'loading' || boot.endsWith('…') ? <><Loader2 className="spin" /> {boot === 'loading' ? 'Pokrećem…' : boot}</> : (
+        {boot === 'loading' || boot.endsWith('…') ? <><Loader2 className="spin" /> {boot === 'loading' ? 'Starting…' : boot}</> : (
           <div className="max-w-md rounded-xl border border-danger/40 bg-danger/10 p-5 text-center text-danger">
-            <div className="font-medium">Ne mogu pokrenuti backend</div>
+            <div className="font-medium">Could not start the backend</div>
             <div className="mt-1 text-sm">{boot}</div>
-            <Button className="mt-4" onClick={() => window.location.reload()}>Pokušaj ponovo</Button>
+            <Button className="mt-4" onClick={() => window.location.reload()}>Try again</Button>
           </div>
         )}
       </div>
@@ -82,7 +82,7 @@ export default function App() {
       {view.name === 'home' && (
         <>
           <div className="flex justify-end px-4 pt-3">
-            <Button variant="ghost" onClick={() => setShowSettings(true)}><SettingsIcon size={16} /> Postavke</Button>
+            <Button variant="ghost" onClick={() => setShowSettings(true)}><SettingsIcon size={16} /> Settings</Button>
           </div>
           <Home onSubmit={preview} busy={busy} error={error} />
         </>

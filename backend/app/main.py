@@ -1,4 +1,4 @@
-"""FastAPI backend koji Tauri shell pokreće kao sidecar."""
+"""FastAPI backend that the Tauri shell launches as a sidecar."""
 from __future__ import annotations
 
 import argparse
@@ -35,7 +35,7 @@ ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 
 
-def safe_name(s: str, fallback: str = "bez imena") -> str:
+def safe_name(s: str, fallback: str = "untitled") -> str:
     s = ILLEGAL.sub("", s).strip(" .")
     s = re.sub(r"\s+", " ", s)
     if not s or s.upper() in RESERVED:
@@ -43,14 +43,14 @@ def safe_name(s: str, fallback: str = "bez imena") -> str:
     return s[:150]
 
 
-# ---------------------------------------------------------------- modeli
+# ---------------------------------------------------------------- models
 class PreviewIn(BaseModel):
     url: str
 
 
 class AliasIn(BaseModel):
-    credit: str          # originalni kredit "Majke"
-    to: str              # kanonsko ime
+    credit: str          # original credit, e.g. "Majke"
+    to: str              # canonical name
 
 
 class JobIn(BaseModel):
@@ -103,7 +103,7 @@ def _target_folder(job: Job, pl: dict, artist: str, album: str | None) -> str:
     if mode == "artist":
         return str(base / safe_name(artist))
     if mode == "artist-album":
-        return str(base / safe_name(artist) / safe_name(album or "Singlovi"))
+        return str(base / safe_name(artist) / safe_name(album or "Singles"))
     owner = pl.get("owner")
     name = pl["name"] if pl.get("kind") == "track" else (f"{pl['name']} - {owner}" if owner else pl["name"])
     return str(base / safe_name(name))
@@ -111,7 +111,7 @@ def _target_folder(job: Job, pl: dict, artist: str, album: str | None) -> str:
 
 def _file_stem(job: Job, title: str, artist: str, position: int | None) -> str:
     naming = job.settings.get("naming", "artist-title")
-    t, a = safe_name(title, "pjesma"), safe_name(artist, "izvodac")
+    t, a = safe_name(title, "track"), safe_name(artist, "artist")
     stem = {"artist-title": f"{a} - {t}", "title-artist": f"{t} - {a}", "title": t}.get(naming, f"{a} - {t}")
     if job.settings.get("track_numbers") and position:
         stem = f"{position:02d}. {stem}"
@@ -129,7 +129,7 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
     artist = job.data.artist_map.get(tid) or track.credit
     job.set_track(tid, status="metadata", artist=artist)
     try:
-        # per-track obogaćivanje: cover, album, godina (2 HTTP poziva)
+        # per-track enrichment: cover, album, year (2 HTTP calls)
         try:
             spotify.enrich([track], workers=1)
         except Exception as exc:  # noqa: BLE001
@@ -149,7 +149,7 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
         job.set_track(tid, status="searching")
         cand = dl.search(track.title, track.artists, (track.duration_ms or 0) / 1000 or None)
         if not cand:
-            job.set_track(tid, status="failed", error="Nema pouzdanog pogotka na YouTubeu (naslov/izvođač/trajanje se ne slažu).")
+            job.set_track(tid, status="failed", error="No reliable YouTube match (title/artist/duration disagree).")
             return
         job.set_track(tid, status="downloading", yt_title=cand.title, yt_url=cand.url)
         tmp_base = os.path.join(folder, f".{stem}.part-{tid[:6]}")
@@ -169,7 +169,7 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
         log.warning("track %s '%s': %s", tid, track.title, exc)
         msg = str(exc)
         if "Sign in to confirm" in msg or "bot" in msg.lower():
-            msg = "YouTube traži potvrdu da nisi bot. U postavkama dodaj cookies datoteku iz svog browsera."
+            msg = "YouTube wants proof you are not a bot. Add a cookies file from your browser in Settings."
         job.set_track(tid, status="failed", error=msg[:300])
     finally:
         for leftover in Path(folder if 'folder' in locals() else ".").glob(f".{stem}.part-{tid[:6]}*") if 'stem' in locals() else []:
@@ -196,7 +196,7 @@ def _run_job(job: Job) -> None:
     job.emit("job", **job.snapshot())
 
 
-# ---------------------------------------------------------------- rute
+# ---------------------------------------------------------------- routes
 @app.get("/api/health")
 def health():
     return {"ok": True, "ffmpeg": bool(ffmpeg_path()), "version": "0.1.0"}
@@ -248,7 +248,7 @@ def preview(body: PreviewIn):
 def create_job(body: JobIn):
     settings = {**lib.settings(), **body.settings}
     if not ffmpeg_path():
-        raise HTTPException(400, "ffmpeg nije instaliran ili nije na PATH-u.")
+        raise HTTPException(400, "ffmpeg is not installed or not on PATH.")
     for a in body.save_aliases:
         parts = [p.strip() for p in a.credit.split(", ") if p.strip()]
         lib.save_alias(credit_key(parts), a.credit, a.to)
@@ -263,7 +263,7 @@ def create_job(body: JobIn):
 def get_job(jid: str):
     job = JOBS.get(jid)
     if not job:
-        raise HTTPException(404, "nema takvog posla")
+        raise HTTPException(404, "no such job")
     return job.snapshot()
 
 
@@ -271,7 +271,7 @@ def get_job(jid: str):
 def cancel_job(jid: str):
     job = JOBS.get(jid)
     if not job:
-        raise HTTPException(404, "nema takvog posla")
+        raise HTTPException(404, "no such job")
     job.cancel.set()
     return {"ok": True}
 
@@ -280,7 +280,7 @@ def cancel_job(jid: str):
 async def job_events(jid: str, since: int = 0):
     job = JOBS.get(jid)
     if not job:
-        raise HTTPException(404, "nema takvog posla")
+        raise HTTPException(404, "no such job")
 
     async def gen():
         idx = since

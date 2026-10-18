@@ -1,5 +1,5 @@
 #!/bin/bash
-# Pakira Python backend u jedan binary koji Tauri bundla kao sidecar.
+# Packages the Python backend into a single binary that Tauri bundles as a sidecar.
 set -euo pipefail
 cd "$(dirname "$0")/../backend"
 TRIPLE=$(rustc -vV 2>/dev/null | sed -n 's/^host: //p' || echo x86_64-unknown-linux-gnu)

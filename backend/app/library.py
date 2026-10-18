@@ -1,4 +1,4 @@
-"""SQLite: postavke, aliasi izvođača, evidencija skinutog."""
+"""SQLite: settings, artist aliases, download history."""
 from __future__ import annotations
 
 import json
@@ -92,7 +92,7 @@ class Library:
                 {"playlist_id": None, "album": None, "created": time.time(), **row})
 
     def have(self, track_ids: list[str]) -> dict[str, str]:
-        """track_id -> postojeća datoteka (samo ako još postoji na disku)."""
+        """track_id -> existing file (only if it is still on disk)."""
         if not track_ids:
             return {}
         q = ",".join("?" * len(track_ids))

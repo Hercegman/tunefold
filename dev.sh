@@ -1,5 +1,5 @@
 #!/bin/bash
-# Dev: Python backend + Tauri (Vite) s hot reloadom. Ctrl+C gasi oboje.
+# Dev: Python backend + Tauri (Vite) with hot reload. Ctrl+C stops both.
 set -e
 cd "$(dirname "$0")"
 export PATH="$HOME/.cargo/bin:$PATH"

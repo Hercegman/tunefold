@@ -6,16 +6,16 @@ import type { JobSnapshot, Playlist, TrackState, TrackStatus } from '../types'
 import { Badge, Button, Cover } from './ui'
 
 const STATUS: Record<TrackStatus, { label: string; tone: 'muted' | 'accent' | 'warn' | 'danger' | 'info' }> = {
-  queued: { label: 'U redu', tone: 'muted' },
-  metadata: { label: 'Metapodaci', tone: 'info' },
-  searching: { label: 'Tražim na YouTubeu', tone: 'info' },
-  downloading: { label: 'Skidam', tone: 'info' },
-  converting: { label: 'Konvertiram', tone: 'info' },
-  tagging: { label: 'Tagovi i cover', tone: 'info' },
-  done: { label: 'Gotovo', tone: 'accent' },
-  skipped: { label: 'Već postoji', tone: 'accent' },
-  failed: { label: 'Neuspjelo', tone: 'danger' },
-  cancelled: { label: 'Prekinuto', tone: 'warn' },
+  queued: { label: 'Queued', tone: 'muted' },
+  metadata: { label: 'Metadata', tone: 'info' },
+  searching: { label: 'Searching YouTube', tone: 'info' },
+  downloading: { label: 'Downloading', tone: 'info' },
+  converting: { label: 'Converting', tone: 'info' },
+  tagging: { label: 'Tags and cover', tone: 'info' },
+  done: { label: 'Done', tone: 'accent' },
+  skipped: { label: 'Already exists', tone: 'accent' },
+  failed: { label: 'Failed', tone: 'danger' },
+  cancelled: { label: 'Cancelled', tone: 'warn' },
 }
 
 export function DownloadView({ jobId, playlist, onBack, onRetry }: {
@@ -58,14 +58,14 @@ export function DownloadView({ jobId, playlist, onBack, onRetry }: {
             <h1 className="truncate text-xl font-semibold tracking-tight">{playlist.name}</h1>
             <div className="mt-0.5 flex items-center gap-2 text-sm text-muted">
               {running ? <Loader2 size={14} className="spin" /> : snap?.status === 'cancelled' ? <AlertTriangle size={14} className="text-warn" /> : <CheckCircle2 size={14} className="text-accent" />}
-              <span>{done} / {total} gotovo{failed.length ? `, ${failed.length} neuspjelo` : ''}</span>
+              <span>{done} / {total} done{failed.length ? `, ${failed.length} failed` : ''}</span>
             </div>
           </div>
           <div className="flex gap-2">
-            {snap?.folder && <Button onClick={() => revealPath(snap.folder!)}><FolderOpen size={16} /> Otvori mapu</Button>}
+            {snap?.folder && <Button onClick={() => revealPath(snap.folder!)}><FolderOpen size={16} /> Open folder</Button>}
             {running
-              ? <Button variant="danger" onClick={() => api.cancelJob(jobId)}><Square size={14} /> Zaustavi</Button>
-              : failed.length > 0 && <Button variant="primary" onClick={() => onRetry(failed.map((t) => t.id))}><RotateCcw size={16} /> Ponovi neuspjele ({failed.length})</Button>}
+              ? <Button variant="danger" onClick={() => api.cancelJob(jobId)}><Square size={14} /> Stop</Button>
+              : failed.length > 0 && <Button variant="primary" onClick={() => onRetry(failed.map((t) => t.id))}><RotateCcw size={16} /> Retry failed ({failed.length})</Button>}
           </div>
         </div>
         <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-panel-2">

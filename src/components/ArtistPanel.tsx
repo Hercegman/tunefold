@@ -6,10 +6,10 @@ import { Badge, inputCls } from './ui'
 export interface Decision { accepted: boolean; to: string }
 
 const KIND: Record<Suggestion['kind'], { label: string; tone: 'accent' | 'info' | 'warn' | 'muted' }> = {
-  merge: { label: 'Spajanje', tone: 'accent' },
-  feat: { label: 'Gost (feat.)', tone: 'info' },
-  spelling: { label: 'Zapis', tone: 'warn' },
-  alias: { label: 'Spremljeno pravilo', tone: 'muted' },
+  merge: { label: 'Fold', tone: 'accent' },
+  feat: { label: 'Guest (feat.)', tone: 'info' },
+  spelling: { label: 'Spelling', tone: 'warn' },
+  alias: { label: 'Saved rule', tone: 'muted' },
 }
 
 export function ArtistPanel({ suggestions, decisions, onChange }: {
@@ -22,7 +22,7 @@ export function ArtistPanel({ suggestions, decisions, onChange }: {
   if (suggestions.length === 0) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3 text-sm text-muted">
-        <Users size={16} /> Izvođači su već uredni, nema što grupirati.
+        <Users size={16} /> Artists are already tidy, nothing to fold.
       </div>
     )
   }
@@ -30,8 +30,8 @@ export function ArtistPanel({ suggestions, decisions, onChange }: {
     <div className="rounded-xl border border-accent/30 bg-panel">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
         <Sparkles size={16} className="text-accent" />
-        <span className="text-sm font-medium">Pametno grupiranje izvođača</span>
-        <Badge tone="accent">{active} / {suggestions.length} aktivno</Badge>
+        <span className="text-sm font-medium">Smart artist folding</span>
+        <Badge tone="accent">{active} / {suggestions.length} active</Badge>
         <span className="ml-auto text-muted">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
       </button>
       {open && (
@@ -48,7 +48,7 @@ function Row({ s, d, onChange }: { s: Suggestion; d: Decision; onChange: (d: Dec
   const k = KIND[s.kind]
   return (
     <div className={`flex items-start gap-3 px-4 py-3 ${d.accepted ? '' : 'opacity-60'}`}>
-      <button onClick={() => onChange({ ...d, accepted: !d.accepted })} title={d.accepted ? 'Isključi' : 'Uključi'}
+      <button onClick={() => onChange({ ...d, accepted: !d.accepted })} title={d.accepted ? 'Disable' : 'Enable'}
         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition ${d.accepted ? 'border-accent bg-accent text-accent-fg' : 'border-line bg-bg text-transparent'}`}>
         <Check size={14} />
       </button>
@@ -68,13 +68,13 @@ function Row({ s, d, onChange }: { s: Suggestion; d: Decision; onChange: (d: Dec
           )}
           {s.alternatives.length > 0 && (
             <select className="rounded-md border border-line bg-bg px-2 py-0.5 text-xs" value="" onChange={(e) => e.target.value && onChange({ ...d, to: e.target.value })}>
-              <option value="">ili…</option>
+              <option value="">or…</option>
               {s.alternatives.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           )}
         </div>
         <div className="mt-1 text-xs text-muted">
-          {s.track_ids.length} {s.track_ids.length === 1 ? 'pjesma' : 'pjesme'} · {s.reason}
+          {s.track_ids.length} {s.track_ids.length === 1 ? 'track' : 'tracks'} · {s.reason}
         </div>
       </div>
       {!d.accepted && <X size={14} className="mt-1 text-muted" />}

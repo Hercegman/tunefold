@@ -1,4 +1,4 @@
-"""Pisanje tagova i covera u mp3 / m4a / flac / opus / wav (mutagen)."""
+"""Writing tags and cover art to mp3 / m4a / flac / opus / wav (mutagen)."""
 from __future__ import annotations
 
 import logging
@@ -95,4 +95,4 @@ def write_tags(path: str, *, title: str, artist: str, album: str | None, date: s
                 a["metadata_block_picture"] = [base64.b64encode(pic.write()).decode("ascii")]
         a.save()
     else:
-        log.info("format %s ne podržava tagove, preskačem", ext)
+        log.info("format %s does not support tags, skipping", ext)

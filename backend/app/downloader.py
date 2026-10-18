@@ -1,4 +1,4 @@
-"""YouTube pretraga, odabir pravog snimka i download preko yt-dlp + ffmpeg."""
+"""YouTube search, picking the right upload, and download via yt-dlp + ffmpeg."""
 from __future__ import annotations
 
 import logging
@@ -77,8 +77,9 @@ class Candidate:
 
 def pick_match(entries: list[dict], title: str, artists: list[str], duration_s: float | None,
                loose: bool = False) -> Candidate | None:
-    """Prvo naslov, pa izvođač, pa trajanje. Odbij ako je trajanje >30 s off
-    (live/remix/sped-up). `loose` uzme najbliže trajanje kad strogo ne nađe."""
+    """Title first, then artist, then duration. Reject when the duration is
+    >30 s off (live/remix/sped-up). `loose` takes the closest duration when the
+    strict pass finds nothing."""
     entries = [e for e in entries if e and e.get("id")]
     if not entries:
         return None
@@ -88,7 +89,7 @@ def pick_match(entries: list[dict], title: str, artists: list[str], duration_s: 
         if by_artist:
             pool = by_artist
         elif not loose:
-            log.info("nijedan kandidat ne spominje izvođača %r za %r", artists, title)
+            log.info("no candidate mentions artist %r for %r", artists, title)
             return None
     elif not loose:
         return None
@@ -102,7 +103,7 @@ def pick_match(entries: list[dict], title: str, artists: list[str], duration_s: 
     best = min(pool, key=dist)
     off = dist(best)
     if duration_s and off > DURATION_HARD_S and not loose:
-        log.info("najbolji kandidat je %.0fs off za %r, odbijam", off, title)
+        log.info("best candidate is %.0fs off for %r, rejecting", off, title)
         return None
     score = 100 - min(off, 100) if duration_s else 50
     return Candidate(url=f"https://www.youtube.com/watch?v={best['id']}", title=best.get("title", ""),
@@ -146,10 +147,10 @@ class Downloader:
 
     def download(self, url: str, dest_base: str, progress: Callable[[float], None] | None = None,
                  on_convert: Callable[[], None] | None = None) -> str:
-        """Skini `url` u `dest_base`.<ext>. Vraća put do gotove datoteke."""
+        """Download `url` into `dest_base`.<ext>. Returns the finished file path."""
         ff = ffmpeg_path()
         if not ff:
-            raise RuntimeError("ffmpeg nije pronađen na PATH-u.")
+            raise RuntimeError("ffmpeg was not found on PATH.")
         spec = FORMATS[self.fmt]
         pp = {"key": "FFmpegExtractAudio", "preferredcodec": self.fmt}
         if spec["lossy"]:
@@ -181,5 +182,5 @@ class Downloader:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.extract_info(url, download=True)
         if not os.path.exists(expected):
-            raise RuntimeError("yt-dlp nije proizveo audio datoteku.")
+            raise RuntimeError("yt-dlp did not produce an audio file.")
         return expected

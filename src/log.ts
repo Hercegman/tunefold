@@ -1,4 +1,4 @@
-/** Log u konzolu i, u Tauri buildu, u stdout + log datoteku aplikacije. */
+/** Log to the console and, in the Tauri build, to stdout + the app log file. */
 import { isTauri } from './backend'
 
 type Level = 'info' | 'warn' | 'error'

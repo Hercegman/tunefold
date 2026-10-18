@@ -82,7 +82,7 @@ class Playlist:
 def parse_url(url: str) -> tuple[str, str]:
     m = URL_RE.search(url.strip())
     if not m:
-        raise SpotifyError("Ovo ne izgleda kao Spotify link na playlistu, album ili pjesmu.")
+        raise SpotifyError("This does not look like a Spotify playlist, album or track link.")
     kind = m.group(1) or m.group(3)
     sid = m.group(2) or m.group(4)
     return kind, sid
@@ -93,7 +93,7 @@ def split_credit(subtitle: str) -> list[str]:
     like 'Earth, Wind & Fire' survive as far as Spotify itself keeps them."""
     subtitle = (subtitle or "").replace("\xa0", " ")
     parts = [p.strip() for p in re.split(r",\s+", subtitle) if p.strip()]
-    return parts or [subtitle.strip() or "Nepoznat izvođač"]
+    return parts or [subtitle.strip() or "Unknown Artist"]
 
 
 def _deep_find(obj, key, depth=0):
@@ -133,23 +133,23 @@ class SpotifyClient:
                 continue
             if r.status_code == 429:
                 wait = float(r.headers.get("retry-after", 2 + attempt * 2))
-                log.warning("Spotify 429, čekam %.0fs", wait)
+                log.warning("Spotify 429, waiting %.0fs", wait)
                 time.sleep(min(wait, 30))
                 continue
             return r
-        raise SpotifyError(f"Mrežna greška prema Spotifyju: {last}")
+        raise SpotifyError(f"Network error talking to Spotify: {last}")
 
     def _next_data(self, url: str) -> dict:
         r = self._get(url)
         if r.status_code in (401, 403):
-            raise SpotifyError("Spotify je odbio pristup. Playlista je privatna ili nedostupna.")
+            raise SpotifyError("Spotify refused access. The playlist is private or unavailable.")
         if r.status_code == 404:
-            raise SpotifyError("Spotify kaže da ovaj sadržaj ne postoji.")
+            raise SpotifyError("Spotify says this content does not exist.")
         if r.status_code != 200:
-            raise SpotifyError(f"Spotify embed vratio HTTP {r.status_code}.")
+            raise SpotifyError(f"Spotify embed page returned HTTP {r.status_code}.")
         m = NEXT_DATA_RE.search(r.text)
         if not m:
-            raise SpotifyError("Spotify je promijenio strukturu embed stranice (nema __NEXT_DATA__).")
+            raise SpotifyError("Spotify changed the embed page structure (no __NEXT_DATA__).")
         data = json.loads(m.group(1))
         sess = _deep_find(data, "accessToken")
         if isinstance(sess, dict):
@@ -172,8 +172,8 @@ class SpotifyClient:
             return ent
         pp = (data.get("props") or {}).get("pageProps") or {}
         if "status" in pp and "state" not in pp:
-            raise SpotifyError("Spotify vraća praznu stranicu: sadržaj je privatan, uklonjen ili nedostupan u tvojoj regiji.")
-        raise SpotifyError("Ne mogu pronaći podatke o playlisti u embed stranici.")
+            raise SpotifyError("Spotify returned an empty page: the content is private, removed or unavailable in your region.")
+        raise SpotifyError("Could not find playlist data in the embed page.")
 
     @staticmethod
     def _cover(ent: dict) -> str | None:
@@ -202,7 +202,7 @@ class SpotifyClient:
                             cover_url=t.cover_url, tracks=[t], total=1)
         data = self._next_data(EMBED.format(kind=kind, id=sid))
         ent = self._entity(data)
-        name = ent.get("name") or ent.get("title") or "Bez imena"
+        name = ent.get("name") or ent.get("title") or "Untitled"
         owner = ent.get("subtitle")
         album_name = name if kind == "album" else None
         tracks: list[Track] = []
@@ -215,7 +215,7 @@ class SpotifyClient:
             seen.add(tid)
             tracks.append(Track(
                 id=tid,
-                title=tr.get("title") or tr.get("name") or "Nepoznata pjesma",
+                title=tr.get("title") or tr.get("name") or "Unknown Track",
                 artists=split_credit(tr.get("subtitle") or owner or ""),
                 duration_ms=tr.get("duration"),
                 album=album_name,
@@ -238,11 +238,11 @@ class SpotifyClient:
             r = self.s.get(SPCLIENT.format(id=sid), timeout=30,
                            headers={"authorization": f"Bearer {self._token}", "accept": "application/json"})
             if r.status_code != 200:
-                log.info("spclient HTTP %s, ostajem na embed listi", r.status_code)
+                log.info("spclient HTTP %s, keeping the embed list", r.status_code)
                 return tracks, len(tracks)
             items = ((r.json().get("contents") or {}).get("items")) or []
         except Exception as exc:  # noqa: BLE001
-            log.info("spclient fallback nije uspio: %s", exc)
+            log.info("spclient fallback failed: %s", exc)
             return tracks, len(tracks)
         order: dict[str, int] = {}
         pending: list[str] = []
@@ -259,7 +259,7 @@ class SpotifyClient:
                 t.position = order[t.id]
         if not pending:
             return tracks, len(order) or len(tracks)
-        log.info("playlista ima %d pjesama, dohvaćam još %d preko embed/track", len(order), len(pending))
+        log.info("playlist has %d tracks, fetching %d more via embed/track", len(order), len(pending))
         with cf.ThreadPoolExecutor(max_workers=6) as pool:
             for t in pool.map(self._safe_track, pending):
                 if t:
@@ -285,8 +285,8 @@ class SpotifyClient:
             artists = split_credit(ent.get("subtitle") or "")
         rd = ent.get("releaseDate")
         release = rd.get("isoString", "")[:10] if isinstance(rd, dict) else (rd or None)
-        t = Track(id=tid, title=ent.get("name") or ent.get("title") or "Nepoznata pjesma",
-                  artists=artists or ["Nepoznat izvođač"], duration_ms=ent.get("duration"),
+        t = Track(id=tid, title=ent.get("name") or ent.get("title") or "Unknown Track",
+                  artists=artists or ["Unknown Artist"], duration_ms=ent.get("duration"),
                   release_date=release, cover_url=self._cover(ent),
                   playable=bool(ent.get("isPlayable", True)))
         if with_album:
@@ -295,8 +295,8 @@ class SpotifyClient:
 
     def album_of(self, tid: str) -> str | None:
         """og:description on the share page reads 'Artist · Album · Song · Year'."""
-        # Spotify servira SEO stranicu s og: tagovima samo "jednostavnim" klijentima;
-        # s pravim Chrome UA-om dobiješ web player bez tih meta tagova.
+        # Spotify serves the SEO page with og: tags only to "simple" clients;
+        # a real Chrome UA gets the web player without those meta tags.
         try:
             r = self._get(TRACK_PAGE.format(id=tid), headers={"user-agent": "Mozilla/5.0"})
         except SpotifyError:
@@ -324,7 +324,7 @@ class SpotifyClient:
             t.cover_url = t.cover_url or full.cover_url
             t.album = t.album or full.album
             t.release_date = t.release_date or full.release_date
-            if full.artists and full.artists != ["Nepoznat izvođač"]:
+            if full.artists and full.artists != ["Unknown Artist"]:
                 t.artists = full.artists
         with cf.ThreadPoolExecutor(max_workers=workers) as pool:
             list(pool.map(one, tracks))

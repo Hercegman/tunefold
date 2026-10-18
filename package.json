@@ -1,7 +1,7 @@
 {
   "name": "tunefold",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:backend": "backend/.venv/bin/python backend/run.py --port 8765 -v",
-    "build:backend": "src-tauri/build-backend.sh",
+    "build:backend": "backend/.venv/bin/python scripts/build_backend.py",
     "dist": "npm run build:backend && tauri build"
   },
   "dependencies": {

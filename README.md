@@ -86,7 +86,7 @@ Prerequisites: [Node 20+](https://nodejs.org), [Rust](https://rustup.rs), Python
 git clone https://github.com/hercegman/tunefold.git
 cd tunefold
 npm install
-python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt
+python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt pyinstaller
 
 ./dev.sh          # backend + desktop window with hot reload
 ./dev.sh web      # same UI in the browser at http://localhost:5173
@@ -106,6 +106,22 @@ This packages the Python backend into a single binary with PyInstaller, places i
 in `src-tauri/binaries/` as a Tauri sidecar, and builds the desktop bundles
 (`.deb`, AppImage and `.rpm` on Linux). The app starts the backend itself and
 shuts it down with the window.
+
+## Releases
+
+Releases are built by GitHub Actions for Linux (x64), macOS (Apple Silicon and
+Intel) and Windows (x64), each with its own PyInstaller sidecar, and attached to
+a **draft** GitHub Release. To cut one:
+
+```bash
+python scripts/bump_version.py 0.2.0        # package.json, tauri.conf.json, Cargo.toml
+git commit -am "Release 0.2.0"
+git tag v0.2.0 && git push && git push --tags
+```
+
+When the `Release` workflow finishes, open the draft on the Releases page,
+check the assets and publish it. `ffmpeg` is not bundled yet, so it has to be
+on the user's PATH.
 
 ## Architecture
 

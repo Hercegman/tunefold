@@ -8,8 +8,9 @@ places.
 The solution works purely with names as the user sees them:
   1. name key = no diacritics, no punctuation, casefolded, leading "the" dropped
   2. same key, different spelling      -> unify on the most common spelling
-  3. credit A is a proper subset of B  -> suggest folding under the WIDER name
-     ("Silk Sonic" -> "Bruno Mars, Anderson .Paak, Silk Sonic")
+  3. credit A is a proper subset of B  -> same act, filed twice. Fold under
+     whichever of the two carries MORE tracks, so a side project joins the big
+     catalogue rather than a discography being buried under a collaboration.
   4. exception: "(feat. X)" in the title. X is not a co-equal artist, so the
      track goes under the primary artist rather than "Primary, X".
 Everything is only a suggestion: the user confirms, renames or rejects, and the
@@ -167,51 +168,100 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
             reason="A guest from the title (feat.) is not a co-equal artist; the track goes under the primary one.",
         ))
 
-    # 6. subset -> superset: "Silk Sonic" -> "Bruno Mars, Anderson .Paak, Silk Sonic"
+    # 6. overlapping credits: "Silk Sonic" and "Bruno Mars, Anderson .Paak, Silk
+    #    Sonic" are one act filed twice. Which name wins is decided by how many
+    #    tracks each carries, NOT by which credit is wider. Folding every narrow
+    #    credit into the wider one buries a whole discography under a one-off
+    #    collaboration: solo "Bruno Mars" is a subset of the trio credit, so a
+    #    width-only rule files 24K Magic under Silk Sonic.
     keysets = list(groups)
-    maximal = [ks for ks in keysets if not any(ks < other for other in keysets)]
-    merged_into: dict[frozenset, list[frozenset]] = defaultdict(list)
-    ambiguous: dict[frozenset, list[frozenset]] = {}
-    for ks in keysets:
-        supers = [m for m in maximal if ks < m]
-        if not supers:
+
+    def rank(ks: frozenset) -> tuple:
+        """Bigger catalogue wins; ties go to the wider credit, then by name."""
+        return (len(groups[ks]), len(ks), group_name[ks])
+
+    related = {ks: [p for p in keysets if p != ks and (p < ks or ks < p)] for ks in keysets}
+    target_of: dict[frozenset, frozenset] = {}
+    for ks, partners in related.items():
+        if not partners:
             continue
-        supers.sort(key=lambda m: (-len(groups[m]), -len(m)))
-        merged_into[supers[0]].append(ks)
-        if len(supers) > 1:
-            ambiguous[ks] = supers
+        best = max(partners, key=rank)
+        if rank(best) > rank(ks):
+            target_of[ks] = best
+
+    def final_target(ks: frozenset) -> frozenset:
+        """Follow a chain of folds to its end. rank strictly increases along the
+        way so this terminates; the seen set guards against equal-rank ties."""
+        seen = {ks}
+        while ks in target_of and target_of[ks] not in seen:
+            ks = target_of[ks]
+            seen.add(ks)
+        return ks
+
+    merged_into: dict[frozenset, list[frozenset]] = defaultdict(list)
+    for ks in target_of:
+        dest = final_target(ks)
+        if dest != ks:
+            merged_into[dest].append(ks)
+
     for target, sources in merged_into.items():
         to = group_name[target]
         ids = [t.id for ks in sources for t in groups[ks]]
         for tid in ids:
             artist_map[tid] = to
-        # alternatives: the reverse direction (everything under the narrower name),
-        # plus the other supersets when there are several
+        # alternatives: every other credit this one overlaps with, so the reverse
+        # direction is always one click away
         alts = sorted({group_name[ks] for ks in sources}
-                      | {group_name[m] for ks in sources for m in ambiguous.get(ks, []) if m != target})
+                      | {group_name[p] for ks in sources for p in related[ks] if p != target})
         suggestions.append(Suggestion(
             id=f"merge:{credit_key(to.split(', '))}", kind="merge", to=to,
             sources=[group_name[ks] for ks in sources], track_ids=ids,
             count_to=len(groups[target]), alternatives=alts,
-            reason="The narrower credit is part of the wider one; folding keeps them together alphabetically.",
+            reason="These credits are the same act written two ways; this name carries "
+                   "the most tracks, so everything goes under it.",
         ))
 
     suggestions.sort(key=lambda s: ({"alias": 0, "merge": 1, "feat": 2, "spelling": 3}[s.kind], -len(s.track_ids)))
     return {"artist_map": artist_map, "suggestions": [s.to_dict() for s in suggestions]}
 
 
-if __name__ == "__main__":  # small smoke test
-    demo = [
+if __name__ == "__main__":  # smoke test: python -m backend.app.artists
+    from collections import Counter
+
+    def show(label: str, tracks: list[TrackCredit]) -> None:
+        r = analyze(tracks)
+        print(f"\n{label}")
+        for s in r["suggestions"]:
+            print(f"  [{s['kind']:8}] {' | '.join(s['sources'])}  ->  {s['to']}")
+        print(f"  folders: {dict(Counter(r['artist_map'].values()))}")
+
+    show("every rule at once", [
         TrackCredit("1", "Smokin Out The Window", ["Silk Sonic"]),
         TrackCredit("2", "Leave the Door Open", ["Bruno Mars", "Anderson .Paak", "Silk Sonic"]),
         TrackCredit("3", "Skate", ["Bruno Mars", "Anderson .Paak", "Silk Sonic"]),
-        TrackCredit("4", "24K Magic", ["Bruno Mars"]),
         TrackCredit("5", "Halo", ["Beyoncé"]),
         TrackCredit("6", "Crazy In Love", ["Beyonce"]),
         TrackCredit("7", "expectations (feat. Chappell Roan)", ["Olivia Rodrigo", "Chappell Roan"]),
         TrackCredit("8", "vampire", ["Olivia Rodrigo"]),
         TrackCredit("9", "I Write Sins Not Tragedies", ["Panic! At The Disco"]),
         TrackCredit("10", "High Hopes", ["Panic at the Disco"]),
-    ]
-    import json
-    print(json.dumps(analyze(demo), ensure_ascii=False, indent=1))
+    ])
+
+    # direction is decided by catalogue size. A wide credit must not swallow a
+    # bigger solo catalogue just because it contains it.
+    show("side project does not swallow the solo catalogue", [
+        *[TrackCredit(f"b{i}", f"Solo {i}", ["Bruno Mars"]) for i in range(15)],
+        *[TrackCredit(f"s{i}", f"Sonic {i}", ["Bruno Mars", "Anderson .Paak", "Silk Sonic"]) for i in range(2)],
+        TrackCredit("x", "Smokin Out The Window", ["Silk Sonic"]),
+    ])
+
+    show("one collaboration does not merge two discographies", [
+        *[TrackCredit(f"a{i}", f"A {i}", ["Artist A"]) for i in range(20)],
+        *[TrackCredit(f"b{i}", f"B {i}", ["Artist B"]) for i in range(15)],
+        TrackCredit("c", "One Off", ["Artist A", "Artist B"]),
+    ])
+
+    show("a real group filed two ways still folds together", [
+        *[TrackCredit(f"g{i}", f"G {i}", ["Bruno Mars", "Anderson .Paak", "Silk Sonic"]) for i in range(6)],
+        *[TrackCredit(f"n{i}", f"N {i}", ["Silk Sonic"]) for i in range(3)],
+    ])

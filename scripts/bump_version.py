@@ -18,6 +18,12 @@ for name in ("package.json", "src-tauri/tauri.conf.json"):
     d["version"] = v
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
 
+init = ROOT / "backend" / "app" / "__init__.py"
+init.write_text(re.sub(r'^__version__ = "[^"]+"', f'__version__ = "{v}"', init.read_text(), count=1, flags=re.M))
+
+lock = ROOT / "src-tauri" / "Cargo.lock"
+lock.write_text(re.sub(r'(name = "tunefold"\nversion = ")[^"]+(")', rf'\g<1>{v}\g<2>', lock.read_text(), count=1))
+
 cargo = ROOT / "src-tauri" / "Cargo.toml"
 cargo.write_text(re.sub(r'^version = "[^"]+"', f'version = "{v}"', cargo.read_text(), count=1, flags=re.M))
-print(f"version set to {v} in package.json, tauri.conf.json, Cargo.toml")
+print(f"version set to {v} in package.json, tauri.conf.json, Cargo.toml, Cargo.lock, backend/app/__init__.py")

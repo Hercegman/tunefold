@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from . import __version__
 from .artists import TrackCredit, analyze, credit_key
 from .downloader import FORMATS, Cancelled, Downloader, ffmpeg_path
 from .library import Library
@@ -199,7 +200,7 @@ def _run_job(job: Job) -> None:
 # ---------------------------------------------------------------- routes
 @app.get("/api/health")
 def health():
-    return {"ok": True, "ffmpeg": bool(ffmpeg_path()), "version": "0.1.0"}
+    return {"ok": True, "ffmpeg": bool(ffmpeg_path()), "version": __version__}
 
 
 @app.get("/api/settings")

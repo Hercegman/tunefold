@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white&labelColor=0e0f12)](https://python.org)
 [![yt-dlp](https://img.shields.io/badge/audio-yt--dlp%20%2B%20ffmpeg-ff5d5d?style=flat-square&labelColor=0e0f12)](https://github.com/yt-dlp/yt-dlp)
 
-[Why](#why-tunefold) · [Features](#features) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
+[Why](#why-tunefold) · [Features](#features) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
 
 </div>
 
@@ -58,6 +58,28 @@ The decision is remembered and applied to every playlist after that.
 <div align="center">
 <img src="docs/screenshots/download.png" alt="Download progress" width="860" />
 </div>
+
+## Compared to other downloaders
+
+|  | Tunefold | [spotDL](https://github.com/spotDL/spotify-downloader) | [Zotify](https://github.com/zotify-dev/zotify) |
+| :--- | :--- | :--- | :--- |
+| Interface | Desktop app | Command line, plus a web mode | Command line |
+| Audio comes from | YouTube | YouTube | Spotify directly |
+| Spotify account | Not needed | Not needed | Required; 320 kbps needs Premium |
+| See the track list before downloading | Yes, and pick row by row | No | No |
+| Artist credit clean-up | Yes, and remembered for later playlists | No | No |
+| Scriptable | No | Yes | Yes |
+
+Be honest about which one you want. **spotDL** is far more mature than this, has
+a much wider feature set and can be driven from a script or a cron job; if you
+want to automate downloads, use it. **Zotify** pulls the real Spotify audio
+rather than a YouTube re-upload, which is a better source, at the cost of
+signing in with an account.
+
+Tunefold exists for one thing those two do not do: deciding, before anything
+touches the disk, what each artist is going to be called. Since the audio comes
+from YouTube it is the same source quality spotDL gets, so if your library is
+already tidy, there is little reason to switch.
 
 ## How it works
 

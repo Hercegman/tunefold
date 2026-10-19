@@ -84,7 +84,7 @@ export default function App() {
           <div className="flex justify-end px-4 pt-3">
             <Button variant="ghost" onClick={() => setShowSettings(true)}><SettingsIcon size={16} /> Settings</Button>
           </div>
-          <Home onSubmit={preview} busy={busy} error={error} />
+          <Home onSubmit={preview} busy={busy} error={error} settings={settings} onOpenSettings={() => setShowSettings(true)} />
         </>
       )}
       {view.name === 'preview' && data && (

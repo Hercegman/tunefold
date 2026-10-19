@@ -102,6 +102,15 @@ class Library:
                 out[r["track_id"]] = r["file"]
         return out
 
+    def stats(self) -> dict:
+        """Totals for the home screen. Counts rows, not files on disk."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS tracks, COUNT(DISTINCT artist) AS artists, "
+            "COUNT(DISTINCT playlist_id) AS playlists, MAX(created) AS last FROM downloads").fetchone()
+        aliases = self._conn.execute("SELECT COUNT(*) AS n FROM aliases").fetchone()["n"]
+        return {"tracks": row["tracks"] or 0, "artists": row["artists"] or 0,
+                "playlists": row["playlists"] or 0, "aliases": aliases or 0, "last": row["last"]}
+
     def downloads(self, limit: int = 500) -> list[dict]:
         rows = self._conn.execute("SELECT * FROM downloads ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]

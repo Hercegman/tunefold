@@ -228,6 +228,11 @@ def delete_alias(key: str):
     return {"ok": True}
 
 
+@app.get("/api/stats")
+def stats():
+    return lib.stats()
+
+
 @app.get("/api/library")
 def library():
     return lib.downloads()

@@ -87,4 +87,12 @@ export interface Recent {
   seen: number
 }
 
+export interface Stats {
+  tracks: number
+  artists: number
+  playlists: number
+  aliases: number
+  last: number | null
+}
+
 export interface Alias { credit_key: string; credit: string; canonical: string; created: number }

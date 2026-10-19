@@ -1,14 +1,86 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Clock, Link2, Music2 } from 'lucide-react'
+import { ArrowRight, Clock, Download, FolderOpen, Link2, Sparkles } from 'lucide-react'
 import { api } from '../api'
-import type { Recent } from '../types'
+import type { Recent, Settings, Stats } from '../types'
+import { Logo } from './Logo'
 import { Button, Cover, inputCls } from './ui'
 
-export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => void; busy: boolean; error: string | null }) {
+const FOLDER_LABEL: Record<Settings['folder_mode'], string> = {
+  playlist: 'one folder per playlist',
+  artist: 'Artist/',
+  'artist-album': 'Artist/Album/',
+}
+
+function ago(ts: number | null): string | null {
+  if (!ts) return null
+  const d = Math.floor((Date.now() / 1000 - ts) / 86400)
+  if (d <= 0) return 'today'
+  if (d === 1) return 'yesterday'
+  if (d < 30) return `${d} days ago`
+  const m = Math.floor(d / 30)
+  return m < 12 ? `${m} month${m > 1 ? 's' : ''} ago` : `${Math.floor(m / 12)} year${m >= 24 ? 's' : ''} ago`
+}
+
+const STEPS = [
+  { icon: Link2, title: 'Paste a link', body: 'A Spotify playlist, album or single track. No account, no API key.' },
+  { icon: Sparkles, title: 'Confirm the folding', body: 'Messy artist credits collapse into one name per artist. You decide each one.' },
+  { icon: Download, title: 'Get tagged files', body: 'MP3, M4A, Opus, FLAC or WAV with tags and cover art, in the layout you chose.' },
+]
+
+function Steps() {
+  return (
+    <section className="grid gap-3 sm:grid-cols-3">
+      {STEPS.map((s, i) => (
+        <div key={s.title} className="rounded-xl border border-line bg-panel p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <s.icon size={15} className="text-accent" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">Step {i + 1}</span>
+          </div>
+          <div className="text-sm font-medium">{s.title}</div>
+          <p className="mt-1 text-xs leading-relaxed text-muted">{s.body}</p>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function StatRow({ stats }: { stats: Stats }) {
+  const cells = [
+    { n: stats.tracks, label: stats.tracks === 1 ? 'track' : 'tracks' },
+    { n: stats.artists, label: stats.artists === 1 ? 'artist' : 'artists' },
+    { n: stats.aliases, label: stats.aliases === 1 ? 'artist rule' : 'artist rules' },
+  ]
+  const last = ago(stats.last)
+  return (
+    <section className="rounded-xl border border-line bg-panel">
+      <div className="grid grid-cols-3 divide-x divide-line">
+        {cells.map((c) => (
+          <div key={c.label} className="px-4 py-3 text-center">
+            <div className="text-2xl font-semibold tabular-nums tracking-tight">{c.n.toLocaleString()}</div>
+            <div className="text-xs text-muted">{c.label}</div>
+          </div>
+        ))}
+      </div>
+      {last && <div className="border-t border-line px-4 py-2 text-center text-xs text-muted">Last download {last}</div>}
+    </section>
+  )
+}
+
+export function Home({ onSubmit, busy, error, settings, onOpenSettings }: {
+  onSubmit: (url: string) => void
+  busy: boolean
+  error: string | null
+  settings: Settings
+  onOpenSettings: () => void
+}) {
   const [url, setUrl] = useState('')
   const [recent, setRecent] = useState<Recent[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
 
-  useEffect(() => { api.recent().then(setRecent).catch(() => {}) }, [])
+  useEffect(() => {
+    api.recent().then(setRecent).catch(() => {})
+    api.stats().then(setStats).catch(() => {})
+  }, [])
 
   useEffect(() => {
     // paste anywhere -> fill input
@@ -20,10 +92,15 @@ export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => voi
     return () => window.removeEventListener('paste', h)
   }, [])
 
+  const lossless = settings.format === 'flac' || settings.format === 'wav'
+  const used = stats !== null && stats.tracks > 0
+
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-10 px-6 pt-16">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center gap-8 px-6 py-10">
       <div className="flex flex-col items-center gap-3 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15 text-accent"><Music2 size={28} /></div>
+        <Logo size={64} />
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Tunefold</div>
         <h1 className="text-3xl font-semibold tracking-tight">Paste a Spotify link</h1>
         <p className="max-w-md text-sm text-muted">A playlist, album or track. You get a preview and artist clean-up suggestions first, then pick what to download.</p>
@@ -38,6 +115,8 @@ export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => voi
         <Button type="submit" variant="primary" loading={busy} className="px-5">Preview <ArrowRight size={16} /></Button>
       </form>
       {error && <div className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
+
+      {stats !== null && (used ? <StatRow stats={stats} /> : <Steps />)}
 
       {recent.length > 0 && (
         <section>
@@ -56,6 +135,18 @@ export function Home({ onSubmit, busy, error }: { onSubmit: (url: string) => voi
           </div>
         </section>
       )}
+
+        </div>
+      </div>
+
+      <button onClick={onOpenSettings} title="Change in Settings"
+        className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-2.5 text-xs text-muted transition hover:bg-panel-2 hover:text-fg">
+        <FolderOpen size={14} className="shrink-0" />
+        <span className="truncate">{settings.out_dir}</span>
+        <span className="ml-auto shrink-0">{settings.format.toUpperCase()}{lossless ? '' : ` ${settings.quality}`}</span>
+        <span className="shrink-0 text-line">·</span>
+        <span className="shrink-0">{FOLDER_LABEL[settings.folder_mode]}</span>
+      </button>
     </div>
   )
 }

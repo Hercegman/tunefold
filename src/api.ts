@@ -1,4 +1,4 @@
-import type { Alias, JobSnapshot, Preview, Recent, Settings } from './types'
+import type { Alias, JobSnapshot, Preview, Recent, Settings, Stats } from './types'
 
 export const PORT = 8765
 export const BASE = `http://127.0.0.1:${PORT}`
@@ -25,6 +25,7 @@ export const api = {
   settings: () => req<Settings>('/api/settings'),
   saveSettings: (patch: Partial<Settings>) => req<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   recent: () => req<Recent[]>('/api/recent'),
+  stats: () => req<Stats>('/api/stats'),
   aliases: () => req<Alias[]>('/api/aliases'),
   deleteAlias: (key: string) => req<{ ok: boolean }>(`/api/aliases/${encodeURIComponent(key)}`, { method: 'DELETE' }),
   createJob: (body: unknown) => req<JobSnapshot>('/api/jobs', { method: 'POST', body: JSON.stringify(body) }),

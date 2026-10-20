@@ -29,6 +29,9 @@ jobs:
       - name: Linux system deps (webkit, gtk, appimage tooling)
         if: runner.os == 'Linux'
         run: |
+          # The runner image ships a packages.microsoft.com source we need
+          # nothing from, and it answers 403 often enough to fail a release.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential curl wget file libssl-dev
 

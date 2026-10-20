@@ -1,6 +1,6 @@
 [package]
 name = "tunefold"
-version = "0.4.0"
+version = "0.4.1"
 description = "Tunefold: Spotify playlists to neatly tagged, artist-folded audio files"
 authors = ["hercegman"]
 license = "MIT"

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle2, Download, FolderOpen, Loader2, Settings as SettingsIcon } from 'lucide-react'
-import { fmtDuration, joinPath } from '../api'
+import { api, fmtDuration, joinPath } from '../api'
 import { sourceLabel } from '../sources'
 import type { Preview as PreviewT, Settings } from '../types'
 import { ArtistPanel, type Decision } from './ArtistPanel'
@@ -12,7 +12,7 @@ export interface StartPayload {
   save_aliases: { credit: string; to: string }[]
 }
 
-export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpenJob, starting }: {
+export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpenJob, onCovers, starting }: {
   data: PreviewT
   settings: Settings
   onBack: () => void
@@ -20,6 +20,8 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpe
   onOpenSettings: () => void
   /** Set while a download for this playlist exists, so leaving it is safe. */
   onOpenJob?: () => void
+  /** Artwork that arrived after the table was already on screen. */
+  onCovers: (covers: Record<string, string>) => void
   starting: boolean
 }) {
   const { playlist: pl, analysis, have } = data
@@ -32,6 +34,28 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpe
     setSelected(new Set(pl.tracks.filter((t) => !have[t.id]).map((t) => t.id)))
     setDecisions(Object.fromEntries(analysis.suggestions.map((s) => [s.id, { accepted: true, to: s.to }])))
   }, [pl.id, analysis, have, pl.tracks])
+
+  // A Spotify playlist embed lists its tracks without artwork, so the first
+  // page of them would sit there wearing the playlist's own picture. Fetch the
+  // real ones behind the table rather than making the table wait for them.
+  // Nothing aborts this on cleanup: the artwork lands in the playlist App
+  // holds, so it is still wanted if this screen is gone by the time it
+  // arrives - and an effect that cancelled itself would be cancelled by
+  // StrictMode's second pass and never deliver anything in development.
+  const asked = useRef<string | null>(null)
+  useEffect(() => {
+    const missing = pl.tracks.filter((t) => !t.cover_url).map((t) => t.id)
+    if (!missing.length || asked.current === pl.id) return
+    asked.current = pl.id
+    void (async () => {
+      for (let i = 0; i < missing.length; i += 50) {
+        try {
+          const got = await api.covers(pl.source, missing.slice(i, i + 50))
+          if (Object.keys(got).length) onCovers(got)
+        } catch { return }
+      }
+    })()
+  }, [pl.id, pl.source, pl.tracks, onCovers])
 
   // final artist name per track = original, then apply accepted suggestions
   const artistMap = useMemo(() => {

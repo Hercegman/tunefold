@@ -15,6 +15,7 @@ const STATUS: Record<TrackStatus, { label: string; tone: 'muted' | 'accent' | 'w
   tagging: { label: 'Tags and cover', tone: 'info' },
   done: { label: 'Done', tone: 'accent' },
   skipped: { label: 'Already exists', tone: 'accent' },
+  requeued: { label: 'Retrying at the end', tone: 'warn' },
   failed: { label: 'Failed', tone: 'danger' },
   cancelled: { label: 'Cancelled', tone: 'warn' },
 }
@@ -80,7 +81,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry, onOpenCollectio
       <div className="flex-1 overflow-auto px-6 py-3">
         {list.map((t) => {
           const s = STATUS[t.status]
-          const active = ['metadata', 'searching', 'downloading', 'converting', 'tagging'].includes(t.status)
+          const active = ['metadata', 'searching', 'downloading', 'converting', 'tagging', 'requeued'].includes(t.status)
           const open = picking === t.id
           return (
             <div key={t.id} className="border-b border-line/60 py-2.5">
@@ -94,6 +95,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry, onOpenCollectio
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
                     <span className="truncate">
                       {t.status === 'failed' ? <span className="text-danger">{t.error}</span>
+                        : t.status === 'requeued' ? <span className="text-warn">{t.error} Trying again once the rest are done.</span>
                         : t.yt_title ? <span className="inline-flex items-center gap-1">YouTube: {t.yt_title}{t.yt_url && <a href={t.yt_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-muted hover:text-fg"><ExternalLink size={11} /></a>}</span>
                         : t.file ? baseName(t.file) : ''}
                     </span>
@@ -114,6 +116,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry, onOpenCollectio
                 <div className="w-36 text-right">
                   {t.status === 'done' || t.status === 'skipped' ? <span className="inline-flex items-center gap-1 text-xs text-accent"><CheckCircle2 size={14} /> {s.label}</span>
                     : t.status === 'failed' ? <span className="inline-flex items-center gap-1 text-xs text-danger"><XCircle size={14} /> {s.label}</span>
+                    : t.status === 'requeued' ? <span className="inline-flex items-center gap-1 text-xs text-warn"><RotateCcw size={13} /> {s.label}</span>
                     : <Badge tone={s.tone}>{s.label}{t.status === 'downloading' ? ` ${t.progress}%` : ''}</Badge>}
                 </div>
               </div>

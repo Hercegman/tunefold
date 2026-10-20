@@ -34,6 +34,7 @@ FORMATS = {
 }
 DURATION_TOL_S = 8
 DURATION_HARD_S = 30
+DOWNLOAD_ATTEMPTS = 3
 STOPWORDS = re.compile(
     r"\b(official|video|audio|lyrics?|lyric video|hd|hq|4k|remaster(?:ed)?|visualizer|music video|spot)\b", re.I)
 PAREN_RE = re.compile(r"[\(\[][^\)\]]*[\)\]]")
@@ -72,6 +73,25 @@ def variant_tags(title: str) -> list[str]:
 
 class Cancelled(Exception):
     pass
+
+
+# Errors that tend to pass on their own. A 403 from googlevideo usually means
+# the signed URL went stale or the CDN throttled us, and re-extracting gets a
+# fresh one - which is exactly why downloading the same track again by hand
+# works.
+TRANSIENT_RE = re.compile(
+    r"(\b403\b|\b429\b|forbidden|too many requests|timed out|timeout|"
+    r"connection (?:reset|aborted|refused|error)|temporary failure|unable to download|"
+    r"fragment|incomplete|remote end closed|content too short|HTTP Error 5\d\d)", re.I)
+PERMANENT_RE = re.compile(
+    r"(sign in to confirm|private video|video unavailable|removed by the uploader|"
+    r"age.?restricted|members.?only|blocked it|not available in your country)", re.I)
+
+
+def transient_error(msg: str | None) -> bool:
+    """Whether this one is worth another go later."""
+    text = msg or ""
+    return bool(TRANSIENT_RE.search(text)) and not PERMANENT_RE.search(text)
 
 
 def ffmpeg_path() -> str | None:
@@ -223,7 +243,17 @@ class Downloader:
         self.cancel = cancel or threading.Event()
 
     def _base_opts(self) -> dict:
-        o = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 15, "retries": 3}
+        o = {
+            "quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 20,
+            # yt-dlp's own retries cover a stumble inside one download; the loop
+            # in download() covers the case where the URL itself has gone bad.
+            "retries": 10, "fragment_retries": 10, "extractor_retries": 3, "file_access_retries": 3,
+            "retry_sleep_functions": {
+                "http": lambda n: min(2 ** n, 15),
+                "fragment": lambda n: min(2 ** n, 15),
+                "extractor": lambda n: min(2 ** n, 15),
+            },
+        }
         if self.cookies and os.path.exists(self.cookies):
             o["cookiefile"] = self.cookies
         return o
@@ -340,8 +370,25 @@ class Downloader:
             "progress_hooks": [hook],
             "concurrent_fragment_downloads": 4,
         }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.extract_info(url, download=True)
+        # Re-extract rather than just retry the request: a 403 means the URL
+        # yt-dlp was handed is no longer good, and only a fresh extraction
+        # produces a new one.
+        for attempt in range(DOWNLOAD_ATTEMPTS):
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.extract_info(url, download=True)
+                break
+            except Cancelled:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                if self.cancel.is_set():
+                    raise Cancelled() from exc
+                if attempt == DOWNLOAD_ATTEMPTS - 1 or not transient_error(str(exc)):
+                    raise
+                log.info("download failed (%s), re-extracting in %ds",
+                         str(exc)[:120], 2 * (attempt + 1))
+                if self.cancel.wait(2 * (attempt + 1)):
+                    raise Cancelled() from exc
         if not os.path.exists(expected):
             raise RuntimeError("yt-dlp did not produce an audio file.")
         return expected

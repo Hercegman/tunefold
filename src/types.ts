@@ -70,7 +70,8 @@ export interface YtCandidate {
 }
 
 export type TrackStatus =
-  | 'queued' | 'metadata' | 'searching' | 'downloading' | 'converting' | 'tagging' | 'done' | 'skipped' | 'failed' | 'cancelled'
+  | 'queued' | 'metadata' | 'searching' | 'downloading' | 'converting' | 'tagging'
+  | 'done' | 'skipped' | 'requeued' | 'failed' | 'cancelled'
 
 export interface TrackState {
   id: string

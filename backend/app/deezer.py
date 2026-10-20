@@ -163,6 +163,18 @@ class DeezerClient:
     def track(self, tid: str) -> Track:
         return self._track(self._api(f"/track/{tid}"), position=None, album=None, cover=None)
 
+    def covers(self, ids: list[str], workers: int = 4) -> dict[str, str]:
+        """Rarely needed: the catalogue hands the album cover over with the
+        track list already. Here for the odd track that came without one."""
+        def one(tid: str) -> tuple[str, str | None]:
+            try:
+                return tid, self.track(tid).cover_url
+            except Exception as exc:  # noqa: BLE001
+                log.debug("cover %s: %s", tid, exc)
+                return tid, None
+        with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+            return {tid: url for tid, url in pool.map(one, ids) if url}
+
     def enrich(self, tracks: list[Track], workers: int = 4) -> None:
         """Fill release date, album and the full contributor list (1 call each)."""
         def one(t: Track):

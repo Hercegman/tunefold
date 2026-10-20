@@ -47,7 +47,7 @@ The decision is remembered and applied to every playlist after that.
   | Deezer | `deezer.com/…/playlist\|album\|track/…`, `deezer.page.link/…` short links |
   | Apple Music | `music.apple.com/…/playlist\|album\|song/…`, including `?i=` song links |
 - **Playlists, albums and single tracks** from any of the three.
-- **Preview before download.** See every track, its credit, the name it will be saved under, and what you already have. Pick exactly what you want.
+- **Preview before download.** See every track, its own album art, its credit, the name it will be saved under, and what you already have. Pick exactly what you want.
 - **Smart artist folding.** Four kinds of suggestions, all driven by the names people actually see:
   | Kind | Example | Rule |
   | :--- | :--- | :--- |
@@ -61,6 +61,7 @@ The decision is remembered and applied to every playlist after that.
 - **Five formats.** MP3, M4A, Opus (128 to 320 kbps) and FLAC or WAV (lossless).
 - **Your layout.** One folder per playlist, `Artist/`, or `Artist/Album/`. File names as `Artist - Track`, `Track - Artist` or just `Track`, with optional `01.` prefixes.
 - **Resumable.** Tracks already on disk are skipped. Stop any time, retry only what failed.
+- **It retries by itself.** YouTube hands out signed URLs that go stale, and a 403 mid-playlist is routine. Each download re-extracts a fresh URL before giving up, and anything still refused waits for a second pass once the rest are done and nothing is competing for bandwidth. The row says so - "Retrying at the end" - instead of showing you an HTTP code. Errors that will never pass, like a private video, fail straight away.
 - **Parallel downloads** with live per-track progress.
 - **A turntable, not a track list.** What you downloaded plays in the app, filed under the folded artist name - see [the turntable](#the-turntable).
 - **Back goes back.** The arrow and Escape step one screen back, and so do the webview's own back gestures, which an app without a history stack silently swallows. Leaving a running download no longer cancels it or reloads the playlist - the Download button on the preview leads straight back in.
@@ -140,7 +141,7 @@ flowchart LR
    - **Spotify** - the embed page's `__NEXT_DATA__`; long playlists are completed through Spotify's own playlist endpoint with the anonymous token that page carries.
    - **Deezer** - the open `api.deezer.com` catalogue endpoints, paged 100 tracks at a time.
    - **Apple Music** - the `serialized-server-data` the web page is rendered from; a playlist longer than one page is finished through `amp-api`, the endpoint the web player itself uses, with the anonymous token out of its JS bundle.
-2. Artist credits are normalised and compared. Each suggestion lists the tracks it touches and why.
+2. Artist credits are normalised and compared. Each suggestion lists the tracks it touches and why. A Spotify playlist embed lists its tracks without artwork, so the covers are fetched behind the table rather than making the table wait for them.
 3. For every selected track the best YouTube upload is picked - closest to the source duration, with anything the title marks as a different recording pushed behind - then downloaded, converted, tagged and recorded in the local library so the next playlist knows what you already own. The runners-up stay on screen in case you wanted the live take after all.
 
 ## Quick start
@@ -219,7 +220,6 @@ paths that appear in the download history; everything else is a 404.
 
 - [ ] Signed and notarized release builds
 - [ ] Import an existing music folder and run it through artist folding
-- [ ] Per-track cover art in the preview
 - [ ] Lyrics and `.lrc` files
 - [ ] Drag and drop several links at once
 - [ ] Match a playlist across sources when one of them is missing a track

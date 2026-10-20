@@ -27,6 +27,8 @@ export const api = {
   saveSettings: (patch: Partial<Settings>) => req<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   recent: () => req<Recent[]>('/api/recent'),
   collection: () => req<CollectionTrack[]>('/api/collection'),
+  covers: (source: string, ids: string[]) =>
+    req<Record<string, string>>('/api/covers', { method: 'POST', body: JSON.stringify({ source, ids }) }),
   stats: () => req<Stats>('/api/stats'),
   aliases: () => req<Alias[]>('/api/aliases'),
   deleteAlias: (key: string) => req<{ ok: boolean }>(`/api/aliases/${encodeURIComponent(key)}`, { method: 'DELETE' }),

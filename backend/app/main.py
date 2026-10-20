@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .artists import TrackCredit, analyze, credit_key
-from .downloader import FORMATS, Cancelled, Candidate, Downloader, ffmpeg_path
+from .downloader import FORMATS, Cancelled, Candidate, Downloader, ffmpeg_path, transient_error
 from .library import Library
 from .models import SourceError, Track
 from .sources import LABELS, for_url
@@ -63,6 +63,11 @@ class PreviewIn(BaseModel):
 class AliasIn(BaseModel):
     credit: str          # original credit, e.g. "Silk Sonic"
     to: str              # canonical name
+
+
+class CoversIn(BaseModel):
+    source: str = "spotify"
+    ids: list[str]
 
 
 class VersionIn(BaseModel):
@@ -161,7 +166,19 @@ def _pick(ranked: list[Candidate], saved: dict | None) -> Candidate | None:
     return next((c for c in ranked if c.eligible), None)
 
 
-def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate | None = None) -> None:
+def _friendly(msg: str) -> str:
+    """The error as something worth reading."""
+    if "Sign in to confirm" in msg or "bot" in msg.lower():
+        return "YouTube wants proof you are not a bot. Add a cookies file from your browser in Settings."
+    if "403" in msg or "Forbidden" in msg:
+        return "YouTube refused the file (403). This usually clears on its own."
+    if "429" in msg or "Too Many Requests" in msg:
+        return "YouTube is rate limiting us (429)."
+    return msg[:300]
+
+
+def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate | None = None,
+               last_attempt: bool = False) -> None:
     tid = raw["id"]
     if job.cancel.is_set():
         job.set_track(tid, status="cancelled")
@@ -221,9 +238,12 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate |
     except Exception as exc:  # noqa: BLE001
         log.warning("track %s '%s': %s", tid, track.title, exc)
         msg = str(exc)
-        if "Sign in to confirm" in msg or "bot" in msg.lower():
-            msg = "YouTube wants proof you are not a bot. Add a cookies file from your browser in Settings."
-        job.set_track(tid, status="failed", error=msg[:300])
+        # Something that usually passes gets one more go once the rest of the
+        # playlist is done and nothing is competing for bandwidth.
+        if transient_error(msg) and not last_attempt and not job.cancel.is_set():
+            job.set_track(tid, status="requeued", error=_friendly(msg))
+        else:
+            job.set_track(tid, status="failed", error=_friendly(msg))
     finally:
         for leftover in Path(folder if 'folder' in locals() else ".").glob(f".{stem}.part-{tid[:6]}*") if 'stem' in locals() else []:
             try:
@@ -243,6 +263,13 @@ def _run_job(job: Job) -> None:
     workers = max(1, min(int(job.settings.get("parallel", 4)), 8, len(todo) or 1))
     with cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="dl") as pool:
         list(pool.map(lambda t: _run_track(job, dl, pl, t), todo))
+    # Second pass, one at a time: whatever YouTube refused mid-rush usually
+    # goes through once nothing else is pulling at the same time.
+    again = [t for t in todo if job.tracks.get(t["id"], {}).get("status") == "requeued"]
+    if again and not job.cancel.is_set():
+        log.info("retrying %d track(s) after the main pass", len(again))
+        for t in again:
+            _run_track(job, dl, pl, t, last_attempt=True)
     job.main_done = True
     job.finish()
 
@@ -255,7 +282,7 @@ def _downloader_for(job: Job) -> Downloader:
 
 def _rerun_one(job: Job, pl: dict, raw: dict, cand: Candidate) -> None:
     try:
-        _run_track(job, _downloader_for(job), pl, raw, force=cand)
+        _run_track(job, _downloader_for(job), pl, raw, force=cand, last_attempt=True)
     finally:
         with job.lock:
             job.reruns -= 1
@@ -385,6 +412,17 @@ def preview(body: PreviewIn):
     analysis = analyze([TrackCredit(t.id, t.title, t.artists) for t in pl.tracks], lib.aliases())
     return {"playlist": pl.to_dict(), "analysis": analysis,
             "have": lib.have([t.id for t in pl.tracks], name)}
+
+
+@app.post("/api/covers")
+def covers(body: CoversIn):
+    """Artwork for tracks the listing could not supply it for. Separate from
+    /api/preview on purpose: the table is worth more on screen straight away
+    than two seconds later with its pictures."""
+    try:
+        return source_for(body.source).covers(body.ids[:80])
+    except SourceError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/jobs")

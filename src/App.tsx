@@ -82,6 +82,18 @@ export default function App() {
     } finally { setBusy(false) }
   }, [data, url, view, go, replace])
 
+  /** Artwork that arrived after the preview rendered. Patching it into the
+   *  playlist here means the download screen and the job payload get it too. */
+  const fillCovers = useCallback((covers: Record<string, string>) => {
+    setData((d) => d && ({
+      ...d,
+      playlist: {
+        ...d.playlist,
+        tracks: d.playlist.tracks.map((t) => (covers[t.id] ? { ...t, cover_url: covers[t.id] } : t)),
+      },
+    }))
+  }, [])
+
   const retry = useCallback((ids: string[]) => {
     if (!lastPayload) return
     start({ ...lastPayload, track_ids: ids, save_aliases: [] })
@@ -117,7 +129,8 @@ export default function App() {
         <Preview data={data} settings={settings} starting={busy}
           onBack={back} onStart={start} onOpenSettings={() => setShowSettings(true)}
           onOpenJob={job && job.playlistId === data.playlist.id
-            ? () => go({ name: 'download', jobId: job.id }) : undefined} />
+            ? () => go({ name: 'download', jobId: job.id }) : undefined}
+          onCovers={fillCovers} />
       )}
       {view.name === 'download' && data && (
         <DownloadView jobId={view.jobId} playlist={data.playlist} onRetry={retry} onBack={back}

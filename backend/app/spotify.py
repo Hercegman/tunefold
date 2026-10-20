@@ -244,6 +244,22 @@ class SpotifyClient:
             return parts[1] or None
         return None
 
+    def covers(self, ids: list[str], workers: int = 8) -> dict[str, str]:
+        """Per-track artwork, one embed page each.
+
+        The playlist embed lists 50 tracks with title, artists and duration and
+        no artwork at all, and the spclient page that completes long playlists
+        carries only uris - so there is no bulk source to ask. The preview
+        therefore renders first and fills these in behind it."""
+        def one(tid: str) -> tuple[str, str | None]:
+            try:
+                return tid, self.track(tid, with_album=False).cover_url
+            except Exception as exc:  # noqa: BLE001
+                log.debug("cover %s: %s", tid, exc)
+                return tid, None
+        with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+            return {tid: url for tid, url in pool.map(one, ids) if url}
+
     def enrich(self, tracks: list[Track], workers: int = 6) -> None:
         """Fill cover, album, release date and the proper artist list."""
         def one(t: Track):

@@ -274,6 +274,10 @@ class AppleMusicClient:
             return t
         raise SourceError("Apple Music does not list that song on its album any more.")
 
+    def covers(self, ids: list[str], workers: int = 4) -> dict[str, str]:
+        """Nothing to fetch: every lockup in the page model carries artwork."""
+        return {}
+
     def enrich(self, tracks: list[Track], workers: int = 4) -> None:
         """No-op: the page model already carries cover, album and duration."""
         return

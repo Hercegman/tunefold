@@ -48,6 +48,15 @@ class Library:
             CREATE TABLE IF NOT EXISTS recent(
                 url TEXT PRIMARY KEY, kind TEXT, name TEXT, owner TEXT, cover_url TEXT, total INTEGER, seen REAL NOT NULL);
             """)
+            # Tunefold 0.2 knew only Spotify, so rows without a source are Spotify's.
+            # Track ids are only unique per source (Deezer and Apple both number theirs).
+            self._add_column("downloads", "source", "TEXT NOT NULL DEFAULT 'spotify'")
+            self._add_column("recent", "source", "TEXT NOT NULL DEFAULT 'spotify'")
+
+    def _add_column(self, table: str, column: str, decl: str) -> None:
+        have = {r["name"] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+        if column not in have:
+            self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     # settings
     def settings(self) -> dict:
@@ -87,17 +96,19 @@ class Library:
     def record(self, **row) -> None:
         with self._lock, self._conn:
             self._conn.execute(
-                "INSERT OR REPLACE INTO downloads(track_id,playlist_id,title,artist,credit,album,file,created) "
-                "VALUES(:track_id,:playlist_id,:title,:artist,:credit,:album,:file,:created)",
-                {"playlist_id": None, "album": None, "created": time.time(), **row})
+                "INSERT OR REPLACE INTO downloads(track_id,source,playlist_id,title,artist,credit,album,file,created) "
+                "VALUES(:track_id,:source,:playlist_id,:title,:artist,:credit,:album,:file,:created)",
+                {"playlist_id": None, "album": None, "source": "spotify", "created": time.time(), **row})
 
-    def have(self, track_ids: list[str]) -> dict[str, str]:
+    def have(self, track_ids: list[str], source: str = "spotify") -> dict[str, str]:
         """track_id -> existing file (only if it is still on disk)."""
         if not track_ids:
             return {}
         q = ",".join("?" * len(track_ids))
         out = {}
-        for r in self._conn.execute(f"SELECT track_id, file FROM downloads WHERE track_id IN ({q})", track_ids):
+        for r in self._conn.execute(
+                f"SELECT track_id, file FROM downloads WHERE source=? AND track_id IN ({q})",
+                [source, *track_ids]):
             if os.path.exists(r["file"]):
                 out[r["track_id"]] = r["file"]
         return out
@@ -118,9 +129,11 @@ class Library:
     # recent
     def touch_recent(self, url: str, **meta) -> None:
         with self._lock, self._conn:
-            self._conn.execute("INSERT OR REPLACE INTO recent VALUES(?,?,?,?,?,?,?)",
-                               (url, meta.get("kind"), meta.get("name"), meta.get("owner"),
-                                meta.get("cover_url"), meta.get("total"), time.time()))
+            self._conn.execute(
+                "INSERT OR REPLACE INTO recent(url,kind,name,owner,cover_url,total,seen,source) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (url, meta.get("kind"), meta.get("name"), meta.get("owner"), meta.get("cover_url"),
+                 meta.get("total"), time.time(), meta.get("source") or "spotify"))
 
     def recent(self, limit: int = 12) -> list[dict]:
         return [dict(r) for r in self._conn.execute("SELECT * FROM recent ORDER BY seen DESC LIMIT ?", (limit,))]

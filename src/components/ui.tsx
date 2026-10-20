@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 
 type Variant = 'primary' | 'ghost' | 'danger' | 'outline'
 
@@ -14,7 +14,7 @@ export function Button({ variant = 'outline', className = '', loading, children,
     outline: 'border border-line bg-panel hover:bg-panel-2',
   }
   return (
-    <button className={`${base} ${v[variant]} ${className}`} disabled={loading || rest.disabled} {...rest}>
+    <button className={`${base} ${v[variant]} ${className}`} {...rest} disabled={loading || rest.disabled}>
       {loading && <Loader2 size={16} className="spin" />}
       {children}
     </button>
@@ -61,4 +61,12 @@ export function Cover({ url, size = 40, rounded = 'rounded-md' }: { url: string 
   return url
     ? <img src={url} width={size} height={size} className={`${rounded} shrink-0 object-cover bg-panel-2`} alt="" loading="lazy" />
     : <div style={{ width: size, height: size }} className={`${rounded} shrink-0 bg-panel-2`} />
+}
+
+export function BackButton({ onClick, className = '' }: { onClick: () => void; className?: string }) {
+  return (
+    <Button variant="ghost" onClick={onClick} title="Back (Esc)" aria-label="Back" className={`px-2 ${className}`}>
+      <ArrowLeft size={18} />
+    </Button>
+  )
 }

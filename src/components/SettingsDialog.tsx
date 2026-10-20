@@ -90,7 +90,7 @@ export function SettingsDialog({ settings, onChange, onClose }: { settings: Sett
           <div className="overflow-auto px-5 py-4">
             {aliases.length === 0 ? <p className="py-6 text-center text-sm text-muted">No saved rules yet. They are created when you accept suggestions on the playlist preview.</p> : (
               <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Spotify credit</th><th className="py-2">Saved as</th><th /></tr></thead>
+                <thead className="text-left text-xs uppercase tracking-wide text-muted"><tr><th className="py-2">Original credit</th><th className="py-2">Saved as</th><th /></tr></thead>
                 <tbody>
                   {aliases.map((a) => (
                     <tr key={a.credit_key} className="border-t border-line/60">

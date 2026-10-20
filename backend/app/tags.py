@@ -1,4 +1,9 @@
-"""Writing tags and cover art to mp3 / m4a / flac / opus / wav (mutagen)."""
+"""Writing tags and cover art to mp3 / m4a / flac / opus / wav (mutagen).
+
+The artist credit as the source printed it goes into a custom ORIGINAL_ARTISTS
+tag, so folding an artist name never destroys what Spotify, Deezer or Apple
+Music actually said.
+"""
 from __future__ import annotations
 
 import logging
@@ -49,7 +54,7 @@ def write_tags(path: str, *, title: str, artist: str, album: str | None, date: s
             a["tracknumber"] = str(track_no)
         a.save(v2_version=3)
         id3 = ID3(path)
-        id3.add(TXXX(encoding=1, desc="SPOTIFY_ARTISTS", text=original_credit))
+        id3.add(TXXX(encoding=1, desc="ORIGINAL_ARTISTS", text=original_credit))
         if cover:
             id3.add(APIC(encoding=1, mime=_mime(cover), type=3, desc="Cover", data=cover))
         id3.update_to_v23()
@@ -65,7 +70,7 @@ def write_tags(path: str, *, title: str, artist: str, album: str | None, date: s
             a["\xa9day"] = date[:4]
         if track_no:
             a["trkn"] = [(track_no, 0)]
-        a["----:com.apple.iTunes:SPOTIFY_ARTISTS"] = original_credit.encode()
+        a["----:com.apple.iTunes:ORIGINAL_ARTISTS"] = original_credit.encode()
         if cover:
             fmt = MP4Cover.FORMAT_PNG if _mime(cover) == "image/png" else MP4Cover.FORMAT_JPEG
             a["covr"] = [MP4Cover(cover, imageformat=fmt)]
@@ -81,7 +86,7 @@ def write_tags(path: str, *, title: str, artist: str, album: str | None, date: s
             a["date"] = date[:4]
         if track_no:
             a["tracknumber"] = str(track_no)
-        a["spotify_artists"] = original_credit
+        a["original_artists"] = original_credit
         if cover:
             pic = Picture()
             pic.type = 3

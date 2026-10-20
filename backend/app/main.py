@@ -23,14 +23,15 @@ from . import __version__
 from .artists import TrackCredit, analyze, credit_key
 from .downloader import FORMATS, Cancelled, Downloader, ffmpeg_path
 from .library import Library
-from .spotify import SpotifyClient, SpotifyError, Track
+from .models import SourceError, Track
+from .sources import LABELS, for_url
+from .sources import get as source_for
 from .tags import fetch_cover, write_tags
 
 log = logging.getLogger("backend")
 app = FastAPI(title="Tunefold backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 lib = Library()
-spotify = SpotifyClient()
 
 ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
@@ -124,15 +125,16 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
     if job.cancel.is_set():
         job.set_track(tid, status="cancelled")
         return
+    source = pl.get("source") or "spotify"
     track = Track(id=tid, title=raw["title"], artists=list(raw["artists"]), duration_ms=raw.get("duration_ms"),
                   album=raw.get("album"), release_date=raw.get("release_date"), cover_url=raw.get("cover_url"),
-                  position=raw.get("position"))
+                  position=raw.get("position"), source=source)
     artist = job.data.artist_map.get(tid) or track.credit
     job.set_track(tid, status="metadata", artist=artist)
     try:
-        # per-track enrichment: cover, album, year (2 HTTP calls)
+        # per-track enrichment: cover, album, year (a call or two, per source)
         try:
-            spotify.enrich([track], workers=1)
+            source_for(source).enrich([track], workers=1)
         except Exception as exc:  # noqa: BLE001
             log.debug("enrich %s: %s", tid, exc)
         folder = _target_folder(job, pl, artist, track.album)
@@ -144,8 +146,8 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
         dest = os.path.join(folder, f"{stem}.{ext}")
         if os.path.exists(dest):
             job.set_track(tid, status="skipped", file=dest, progress=100)
-            lib.record(track_id=tid, playlist_id=pl.get("id"), title=track.title, artist=artist,
-                       credit=track.credit, album=track.album, file=dest)
+            lib.record(track_id=tid, source=source, playlist_id=pl.get("id"), title=track.title,
+                       artist=artist, credit=track.credit, album=track.album, file=dest)
             return
         job.set_track(tid, status="searching")
         cand = dl.search(track.title, track.artists, (track.duration_ms or 0) / 1000 or None)
@@ -161,7 +163,7 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
                    track_no=track.position if job.settings.get("track_numbers") else None,
                    original_credit=track.credit, cover=fetch_cover(track.cover_url or pl.get("cover_url")))
         os.replace(final, dest)
-        lib.record(track_id=tid, playlist_id=pl.get("id"), title=track.title, artist=artist,
+        lib.record(track_id=tid, source=source, playlist_id=pl.get("id"), title=track.title, artist=artist,
                    credit=track.credit, album=track.album, file=dest)
         job.set_track(tid, status="done", file=dest, progress=100)
     except Cancelled:
@@ -239,15 +241,23 @@ def library():
     return lib.downloads()
 
 
+@app.get("/api/sources")
+def sources():
+    return LABELS
+
+
 @app.post("/api/preview")
 def preview(body: PreviewIn):
     try:
-        pl = spotify.fetch(body.url)
-    except SpotifyError as exc:
+        name, client = for_url(body.url)
+        pl = client.fetch(body.url)
+    except SourceError as exc:
         raise HTTPException(400, str(exc)) from exc
-    lib.touch_recent(body.url, kind=pl.kind, name=pl.name, owner=pl.owner, cover_url=pl.cover_url, total=pl.total)
+    lib.touch_recent(body.url, kind=pl.kind, name=pl.name, owner=pl.owner, cover_url=pl.cover_url,
+                     total=pl.total, source=name)
     analysis = analyze([TrackCredit(t.id, t.title, t.artists) for t in pl.tracks], lib.aliases())
-    return {"playlist": pl.to_dict(), "analysis": analysis, "have": lib.have([t.id for t in pl.tracks])}
+    return {"playlist": pl.to_dict(), "analysis": analysis,
+            "have": lib.have([t.id for t in pl.tracks], name)}
 
 
 @app.post("/api/jobs")

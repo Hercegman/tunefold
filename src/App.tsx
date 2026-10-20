@@ -3,6 +3,7 @@ import { Loader2, Settings as SettingsIcon } from 'lucide-react'
 import { api } from './api'
 import { ensureBackend } from './backend'
 import { log } from './log'
+import { useNav } from './nav'
 import { DownloadView } from './components/DownloadView'
 import { Home } from './components/Home'
 import { Preview, type StartPayload } from './components/Preview'
@@ -15,13 +16,14 @@ type View = { name: 'home' } | { name: 'preview' } | { name: 'download'; jobId: 
 export default function App() {
   const [boot, setBoot] = useState<'loading' | 'ready' | string>('loading')
   const [settings, setSettings] = useState<Settings | null>(null)
-  const [view, setView] = useState<View>({ name: 'home' })
+  const { view, depth, go, replace, back } = useNav<View>({ name: 'home' })
   const [data, setData] = useState<PreviewT | null>(null)
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [lastPayload, setLastPayload] = useState<StartPayload | null>(null)
+  const [job, setJob] = useState<{ id: string; playlistId: string } | null>(null)
 
   useEffect(() => {
     (async () => {
@@ -36,27 +38,46 @@ export default function App() {
     })()
   }, [])
 
+  // Escape goes back one view, unless a dialog or a text field wants it first.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || showSettings || depth <= 1) return
+      const el = document.activeElement as HTMLInputElement | null
+      const typing = !!el && (el.isContentEditable || el.tagName === 'SELECT' ||
+        (el.tagName === 'INPUT' && el.type !== 'checkbox' && el.type !== 'radio'))
+      if (typing) return
+      back()
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [showSettings, depth, back])
+
   const preview = useCallback(async (u: string) => {
     setBusy(true); setError(null)
     try {
       const d = await api.preview(u)
-      setUrl(u); setData(d); setView({ name: 'preview' })
+      setUrl(u); setData(d); go({ name: 'preview' })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setBusy(false) }
-  }, [])
+  }, [go])
 
   const start = useCallback(async (p: StartPayload) => {
     if (!data) return
     setBusy(true); setError(null)
     try {
-      const job = await api.createJob({ url, playlist: data.playlist, ...p })
+      const created = await api.createJob({ url, playlist: data.playlist, ...p })
       setLastPayload(p)
-      setView({ name: 'download', jobId: job.id })
+      setJob({ id: created.id, playlistId: data.playlist.id })
+      // Retrying from the download screen replaces it instead of stacking a
+      // second one, so Back still leads to the playlist.
+      const next: View = { name: 'download', jobId: created.id }
+      if (view.name === 'download') replace(next)
+      else go(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setBusy(false) }
-  }, [data, url])
+  }, [data, url, view, go, replace])
 
   const retry = useCallback((ids: string[]) => {
     if (!lastPayload) return
@@ -84,17 +105,18 @@ export default function App() {
           <div className="flex justify-end px-4 pt-3">
             <Button variant="ghost" onClick={() => setShowSettings(true)}><SettingsIcon size={16} /> Settings</Button>
           </div>
-          <Home onSubmit={preview} busy={busy} error={error} settings={settings} onOpenSettings={() => setShowSettings(true)} />
+          <Home url={url} onUrlChange={setUrl} onSubmit={preview} busy={busy} error={error}
+            settings={settings} onOpenSettings={() => setShowSettings(true)} />
         </>
       )}
       {view.name === 'preview' && data && (
         <Preview data={data} settings={settings} starting={busy}
-          onBack={() => { setView({ name: 'home' }); setError(null) }}
-          onStart={start} onOpenSettings={() => setShowSettings(true)} />
+          onBack={back} onStart={start} onOpenSettings={() => setShowSettings(true)}
+          onOpenJob={job && job.playlistId === data.playlist.id
+            ? () => go({ name: 'download', jobId: job.id }) : undefined} />
       )}
       {view.name === 'download' && data && (
-        <DownloadView jobId={view.jobId} playlist={data.playlist} onRetry={retry}
-          onBack={() => preview(url)} />
+        <DownloadView jobId={view.jobId} playlist={data.playlist} onRetry={retry} onBack={back} />
       )}
       {error && view.name !== 'home' && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg border border-danger/40 bg-panel px-4 py-2 text-sm text-danger shadow-xl" onClick={() => setError(null)}>{error}</div>

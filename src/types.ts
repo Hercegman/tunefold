@@ -1,3 +1,5 @@
+import type { SourceName } from './sources'
+
 export interface Track {
   id: string
   title: string
@@ -9,10 +11,12 @@ export interface Track {
   cover_url: string | null
   position: number | null
   playable: boolean
+  source: SourceName
 }
 
 export interface Playlist {
   id: string
+  source: SourceName
   kind: 'playlist' | 'album' | 'track'
   name: string
   owner: string | null
@@ -79,6 +83,7 @@ export interface JobSnapshot {
 
 export interface Recent {
   url: string
+  source: SourceName
   kind: string
   name: string
   owner: string | null

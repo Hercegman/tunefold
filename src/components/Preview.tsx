@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Download, FolderOpen, Settings as SettingsIcon } from 'lucide-react'
-import { fmtDuration } from '../api'
+import { CheckCircle2, Download, FolderOpen, Loader2, Settings as SettingsIcon } from 'lucide-react'
+import { fmtDuration, joinPath } from '../api'
+import { sourceLabel } from '../sources'
 import type { Preview as PreviewT, Settings } from '../types'
 import { ArtistPanel, type Decision } from './ArtistPanel'
-import { Badge, Button, Cover } from './ui'
+import { BackButton, Badge, Button, Cover } from './ui'
 
 export interface StartPayload {
   track_ids: string[]
@@ -11,12 +12,14 @@ export interface StartPayload {
   save_aliases: { credit: string; to: string }[]
 }
 
-export function Preview({ data, settings, onBack, onStart, onOpenSettings, starting }: {
+export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpenJob, starting }: {
   data: PreviewT
   settings: Settings
   onBack: () => void
   onStart: (p: StartPayload) => void
   onOpenSettings: () => void
+  /** Set while a download for this playlist exists, so leaving it is safe. */
+  onOpenJob?: () => void
   starting: boolean
 }) {
   const { playlist: pl, analysis, have } = data
@@ -61,17 +64,18 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, start
   }
 
   const kindLabel = pl.kind === 'album' ? 'Album' : pl.kind === 'track' ? 'Track' : 'Playlist'
+  const source = sourceLabel(pl.source)
   const folder = settings.folder_mode === 'playlist'
-    ? `${settings.out_dir}/${pl.kind === 'track' ? pl.name : pl.owner ? `${pl.name} - ${pl.owner}` : pl.name}`
-    : settings.folder_mode === 'artist' ? `${settings.out_dir}/<Artist>/` : `${settings.out_dir}/<Artist>/<Album>/`
+    ? joinPath(settings.out_dir, pl.kind === 'track' ? pl.name : pl.owner ? `${pl.name} - ${pl.owner}` : pl.name)
+    : settings.folder_mode === 'artist' ? joinPath(settings.out_dir, '<Artist>') : joinPath(settings.out_dir, '<Artist>', '<Album>')
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-start gap-5 border-b border-line px-6 py-5">
-        <Button variant="ghost" onClick={onBack} className="mt-1 -ml-2 px-2"><ArrowLeft size={18} /></Button>
+        <BackButton onClick={onBack} className="mt-1 -ml-2" />
         <Cover url={pl.cover_url} size={88} rounded="rounded-xl" />
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted">{kindLabel}{pl.owner ? ` · ${pl.owner}` : ''}</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted">{source} {kindLabel}{pl.owner ? ` · ${pl.owner}` : ''}</div>
           <h1 className="truncate text-2xl font-semibold tracking-tight">{pl.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
             <span>{pl.tracks.length} tracks</span>
@@ -82,6 +86,11 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, start
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="flex gap-2">
+            {onOpenJob && (
+              <Button variant="ghost" onClick={onOpenJob} title="Back to the download for this playlist">
+                <Loader2 size={14} className="spin" /> Download
+              </Button>
+            )}
             <Button onClick={onOpenSettings}><SettingsIcon size={16} /> {settings.format.toUpperCase()} {settings.format === 'flac' || settings.format === 'wav' ? '' : settings.quality}</Button>
             <Button variant="primary" onClick={start} disabled={selected.size === 0} loading={starting}>
               <Download size={16} /> Download {selected.size} {selected.size === 1 ? 'track' : 'tracks'}
@@ -106,7 +115,7 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, start
               <th className="w-10 border-b border-line py-2 text-right font-medium">#</th>
               <th className="border-b border-line py-2 pl-3 text-left font-medium">Track</th>
               <th className="border-b border-line py-2 pl-3 text-left font-medium">Artist (in file)</th>
-              <th className="border-b border-line py-2 pl-3 text-left font-medium">Spotify credit</th>
+              <th className="border-b border-line py-2 pl-3 text-left font-medium">{source} credit</th>
               <th className="w-16 border-b border-line py-2 pr-2 text-right font-medium">Length</th>
             </tr>
           </thead>

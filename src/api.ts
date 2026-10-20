@@ -21,6 +21,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => req<{ ok: boolean; ffmpeg: boolean; version: string }>('/api/health'),
+  sources: () => req<Record<string, string>>('/api/sources'),
   preview: (url: string) => req<Preview>('/api/preview', { method: 'POST', body: JSON.stringify({ url }) }),
   settings: () => req<Settings>('/api/settings'),
   saveSettings: (patch: Partial<Settings>) => req<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
@@ -40,6 +41,17 @@ export function jobEvents(id: string, onEvent: (ev: Record<string, unknown>) => 
   }
   es.onerror = () => { /* EventSource reconnects on its own */ }
   return () => es.close()
+}
+
+/** Join a path the way the host OS writes it: out_dir comes from the backend,
+ *  so on Windows it arrives with backslashes. */
+export function joinPath(base: string, ...parts: string[]): string {
+  const sep = base.includes('\\') && !base.includes('/') ? '\\' : '/'
+  return [base.replace(/[\\/]+$/, ''), ...parts].join(sep)
+}
+
+export function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() || path
 }
 
 export function fmtDuration(ms: number | null | undefined): string {

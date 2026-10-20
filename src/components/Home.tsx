@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Clock, Download, FolderOpen, Link2, Sparkles } from 'lucide-react'
 import { api } from '../api'
+import { LINK_RE, SOURCE_NAMES, SOURCES, sourceLabel } from '../sources'
 import type { Recent, Settings, Stats } from '../types'
 import { Logo } from './Logo'
-import { Button, Cover, inputCls } from './ui'
+import { Badge, Button, Cover, inputCls } from './ui'
 
 const FOLDER_LABEL: Record<Settings['folder_mode'], string> = {
   playlist: 'one folder per playlist',
@@ -22,7 +23,7 @@ function ago(ts: number | null): string | null {
 }
 
 const STEPS = [
-  { icon: Link2, title: 'Paste a link', body: 'A Spotify playlist, album or single track. No account, no API key.' },
+  { icon: Link2, title: 'Paste a link', body: 'A playlist, album or single track from Spotify, Deezer or Apple Music. No account, no API key.' },
   { icon: Sparkles, title: 'Confirm the folding', body: 'Messy artist credits collapse into one name per artist. You decide each one.' },
   { icon: Download, title: 'Get tagged files', body: 'MP3, M4A, Opus, FLAC or WAV with tags and cover art, in the layout you chose.' },
 ]
@@ -66,14 +67,15 @@ function StatRow({ stats }: { stats: Stats }) {
   )
 }
 
-export function Home({ onSubmit, busy, error, settings, onOpenSettings }: {
+export function Home({ url, onUrlChange, onSubmit, busy, error, settings, onOpenSettings }: {
+  url: string
+  onUrlChange: (url: string) => void
   onSubmit: (url: string) => void
   busy: boolean
   error: string | null
   settings: Settings
   onOpenSettings: () => void
 }) {
-  const [url, setUrl] = useState('')
   const [recent, setRecent] = useState<Recent[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
 
@@ -86,11 +88,11 @@ export function Home({ onSubmit, busy, error, settings, onOpenSettings }: {
     // paste anywhere -> fill input
     const h = (e: ClipboardEvent) => {
       const t = e.clipboardData?.getData('text') || ''
-      if (/open\.spotify\.com|spotify:/.test(t) && (document.activeElement as HTMLElement)?.tagName !== 'INPUT') setUrl(t.trim())
+      if (LINK_RE.test(t) && (document.activeElement as HTMLElement)?.tagName !== 'INPUT') onUrlChange(t.trim())
     }
     window.addEventListener('paste', h)
     return () => window.removeEventListener('paste', h)
-  }, [])
+  }, [onUrlChange])
 
   const lossless = settings.format === 'flac' || settings.format === 'wav'
   const used = stats !== null && stats.tracks > 0
@@ -102,14 +104,17 @@ export function Home({ onSubmit, busy, error, settings, onOpenSettings }: {
       <div className="flex flex-col items-center gap-3 text-center">
         <Logo size={64} />
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Tunefold</div>
-        <h1 className="text-3xl font-semibold tracking-tight">Paste a Spotify link</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Paste a playlist link</h1>
         <p className="max-w-md text-sm text-muted">A playlist, album or track. You get a preview and artist clean-up suggestions first, then pick what to download.</p>
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {SOURCE_NAMES.map((n) => <Badge key={n} tone="muted">{SOURCES[n].label}</Badge>)}
+        </div>
       </div>
 
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (url.trim()) onSubmit(url.trim()) }}>
         <div className="relative flex-1">
           <Link2 size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://open.spotify.com/playlist/…"
+          <input autoFocus value={url} onChange={(e) => onUrlChange(e.target.value)} placeholder={SOURCES.spotify.example}
             className={`${inputCls} py-3 pl-9 text-base`} />
         </div>
         <Button type="submit" variant="primary" loading={busy} className="px-5">Preview <ArrowRight size={16} /></Button>
@@ -128,7 +133,7 @@ export function Home({ onSubmit, busy, error, settings, onOpenSettings }: {
                 <Cover url={r.cover_url} size={44} />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{r.name}</div>
-                  <div className="truncate text-xs text-muted">{r.kind === 'album' ? 'Album' : r.kind === 'track' ? 'Track' : 'Playlist'}{r.owner ? ` · ${r.owner}` : ''}{r.total ? ` · ${r.total} tracks` : ''}</div>
+                  <div className="truncate text-xs text-muted">{sourceLabel(r.source)} · {r.kind === 'album' ? 'Album' : r.kind === 'track' ? 'Track' : 'Playlist'}{r.owner ? ` · ${r.owner}` : ''}{r.total ? ` · ${r.total} ${r.total === 1 ? 'track' : 'tracks'}` : ''}</div>
                 </div>
               </button>
             ))}

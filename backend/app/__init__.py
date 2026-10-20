@@ -1,3 +1,4 @@
-"""Tunefold backend: Spotify metadata, YouTube audio, tagging, artist grouping."""
+"""Tunefold backend: playlist metadata (Spotify, Deezer, Apple Music),
+YouTube audio, tagging, artist grouping."""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

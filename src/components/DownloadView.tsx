@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, FolderOpen, Loader2, RotateCcw, Square, XCircle } from 'lucide-react'
-import { api, jobEvents } from '../api'
+import { AlertTriangle, CheckCircle2, ExternalLink, FolderOpen, Loader2, RotateCcw, Square, XCircle } from 'lucide-react'
+import { api, baseName, jobEvents } from '../api'
 import { revealPath } from '../backend'
 import type { JobSnapshot, Playlist, TrackState, TrackStatus } from '../types'
-import { Badge, Button, Cover } from './ui'
+import { BackButton, Badge, Button, Cover } from './ui'
 
 const STATUS: Record<TrackStatus, { label: string; tone: 'muted' | 'accent' | 'warn' | 'danger' | 'info' }> = {
   queued: { label: 'Queued', tone: 'muted' },
@@ -52,7 +52,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry }: {
     <div className="flex h-full flex-col">
       <header className="border-b border-line px-6 py-5">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={onBack} className="-ml-2 px-2" disabled={running}><ArrowLeft size={18} /></Button>
+          <BackButton onClick={onBack} className="-ml-2" />
           <Cover url={playlist.cover_url} size={56} rounded="rounded-lg" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-xl font-semibold tracking-tight">{playlist.name}</h1>
@@ -88,7 +88,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry }: {
                 <div className="mt-0.5 truncate text-xs text-muted">
                   {t.status === 'failed' ? <span className="text-danger">{t.error}</span>
                     : t.yt_title ? <span className="inline-flex items-center gap-1">YouTube: {t.yt_title}{t.yt_url && <a href={t.yt_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-muted hover:text-fg"><ExternalLink size={11} /></a>}</span>
-                    : t.file ? t.file.split('/').pop() : ''}
+                    : t.file ? baseName(t.file) : ''}
                 </div>
                 {active && (
                   <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-panel-2">

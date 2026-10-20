@@ -1,9 +1,10 @@
 """Smart artist folding.
 
-Problem: Spotify credits the same artist differently across albums ("Silk Sonic"
-vs "Bruno Mars, Anderson .Paak, Silk Sonic", "Beyoncé" vs "Beyonce"). Anyone who
-sorts a collection alphabetically ends up with one artist scattered over several
-places.
+Problem: a streaming catalogue credits the same artist differently from album to
+album ("Silk Sonic" vs "Bruno Mars, Anderson .Paak, Silk Sonic", "Beyoncé" vs
+"Beyonce"), and the three Tunefold reads from do not even agree with each other.
+Anyone who sorts a collection alphabetically ends up with one artist scattered
+over several places.
 
 The solution works purely with names as the user sees them:
   1. name key = no diacritics, no punctuation, casefolded, leading "the" dropped
@@ -138,7 +139,7 @@ def analyze(tracks: list[TrackCredit], aliases: dict[str, str] | None = None) ->
             reason="Saved rule from a previous playlist.",
         ))
 
-    # 3. display order of a key set = the most common Spotify order
+    # 3. display order of a key set = the order the source uses most often
     def group_display(keyset: frozenset) -> str:
         orders = Counter(display(eff_names[t.id]) for t in groups[keyset])
         return orders.most_common(1)[0][0]

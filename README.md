@@ -4,7 +4,7 @@
 
 # Tunefold
 
-**Turn Spotify playlists into neatly tagged audio files. Fold messy artist credits into one clean name.**
+**Turn Spotify, Deezer and Apple Music playlists into neatly tagged audio files. Fold messy artist credits into one clean name.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-1ed760?style=flat-square&labelColor=0e0f12)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-8b91a0?style=flat-square&labelColor=0e0f12)](#build)
@@ -21,10 +21,11 @@
 
 ## Why Tunefold
 
-Spotify credits the same artist differently from album to album. Some songs are
-filed under **Silk Sonic**, others under **Bruno Mars, Anderson .Paak, Silk
-Sonic**. Some under **Beyoncé**, others under **Beyonce**. A guest on one track
-turns **Olivia Rodrigo** into **Olivia Rodrigo, Chappell Roan**.
+A streaming catalogue credits the same artist differently from album to album.
+Some songs are filed under **Silk Sonic**, others under **Bruno Mars, Anderson
+.Paak, Silk Sonic**. Some under **Beyoncé**, others under **Beyonce**. A guest
+on one track turns **Olivia Rodrigo** into **Olivia Rodrigo, Chappell Roan**.
+And the three catalogues Tunefold reads do not agree with each other either.
 
 Download that playlist with any ordinary tool and your library, sorted by
 artist, is scattered across three folders for one band.
@@ -39,7 +40,13 @@ The decision is remembered and applied to every playlist after that.
 
 ## Features
 
-- **Playlists, albums and single tracks.** Paste any `open.spotify.com` link or `spotify:` URI. No Spotify account, no API key.
+- **Three catalogues, one window.** Paste a link from any of them - no account, no API key, nothing to configure:
+  | Source | Links it takes |
+  | :--- | :--- |
+  | Spotify | `open.spotify.com/playlist\|album\|track/…`, `spotify:album:…` |
+  | Deezer | `deezer.com/…/playlist\|album\|track/…`, `deezer.page.link/…` short links |
+  | Apple Music | `music.apple.com/…/playlist\|album\|song/…`, including `?i=` song links |
+- **Playlists, albums and single tracks** from any of the three.
 - **Preview before download.** See every track, its credit, the name it will be saved under, and what you already have. Pick exactly what you want.
 - **Smart artist folding.** Four kinds of suggestions, all driven by the names people actually see:
   | Kind | Example | Rule |
@@ -48,12 +55,13 @@ The decision is remembered and applied to every playlist after that.
   | Guest | `Olivia Rodrigo, Chappell Roan` → `Olivia Rodrigo` | a `(feat. X)` in the title is a guest, not a co-equal artist |
   | Spelling | `Beyonce` → `Beyoncé`, `Panic at the Disco` → `Panic! At The Disco` | same name, different case, diacritics or punctuation |
   | Saved rule | applied automatically | a decision you made on an earlier playlist |
-- **Correct tags, everywhere.** Title, artist, album artist, album, year, track number and front cover, written as ID3v2.3 for MP3 so car head units and old players read them too. The original Spotify credit is kept in a separate tag, so nothing is lost.
+- **Correct tags, everywhere.** Title, artist, album artist, album, year, track number and front cover, written as ID3v2.3 for MP3 so car head units and old players read them too. The credit the source printed is kept in a separate `ORIGINAL_ARTISTS` tag, so nothing is lost.
 - **Accurate matching.** The YouTube upload is chosen by title, artist and duration, not by the first hit. Live versions, remixes and sped-up edits are rejected.
 - **Five formats.** MP3, M4A, Opus (128 to 320 kbps) and FLAC or WAV (lossless).
 - **Your layout.** One folder per playlist, `Artist/`, or `Artist/Album/`. File names as `Artist - Track`, `Track - Artist` or just `Track`, with optional `01.` prefixes.
 - **Resumable.** Tracks already on disk are skipped. Stop any time, retry only what failed.
 - **Parallel downloads** with live per-track progress.
+- **Back goes back.** The arrow and Escape step one screen back, and so do the webview's own back gestures, which an app without a history stack silently swallows. Leaving a running download no longer cancels it or reloads the playlist - the Download button on the preview leads straight back in.
 
 <div align="center">
 <img src="docs/screenshots/download.png" alt="Download progress" width="860" />
@@ -64,8 +72,9 @@ The decision is remembered and applied to every playlist after that.
 |  | Tunefold | [spotDL](https://github.com/spotDL/spotify-downloader) | [Zotify](https://github.com/zotify-dev/zotify) |
 | :--- | :--- | :--- | :--- |
 | Interface | Desktop app | Command line, plus a web mode | Command line |
+| Reads from | Spotify, Deezer, Apple Music | Spotify | Spotify |
 | Audio comes from | YouTube | YouTube | Spotify directly |
-| Spotify account | Not needed | Not needed | Required; 320 kbps needs Premium |
+| Account | None, for any source | Not needed | Required; 320 kbps needs Premium |
 | See the track list before downloading | Yes, and pick row by row | No | No |
 | Artist credit clean-up | Yes, and remembered for later playlists | No | No |
 | Scriptable | No | Yes | Yes |
@@ -83,11 +92,12 @@ already tidy, there is little reason to switch.
 
 ## How it works
 
-Nothing is downloaded from Spotify. Spotify provides the metadata, YouTube provides the audio.
+Nothing is downloaded from the streaming services. They provide the metadata,
+YouTube provides the audio.
 
 ```mermaid
 flowchart LR
-    A[Spotify link] --> B[Public embed page<br/>metadata, no login]
+    A[Spotify / Deezer /<br/>Apple Music link] --> B[Public page or API<br/>metadata, no login]
     B --> C[Artist folding<br/>suggestions]
     C --> D{You confirm}
     D --> E[YouTube search<br/>title + artist + duration]
@@ -96,7 +106,10 @@ flowchart LR
     G --> H[(Library<br/>SQLite)]
 ```
 
-1. The playlist, album or track is read from Spotify's public embed page. Large playlists are completed through Spotify's own playlist endpoint with the anonymous token that page carries.
+1. The playlist, album or track is read straight from whichever service the link belongs to, all of it public:
+   - **Spotify** - the embed page's `__NEXT_DATA__`; long playlists are completed through Spotify's own playlist endpoint with the anonymous token that page carries.
+   - **Deezer** - the open `api.deezer.com` catalogue endpoints, paged 100 tracks at a time.
+   - **Apple Music** - the `serialized-server-data` the web page is rendered from; a playlist longer than one page is finished through `amp-api`, the endpoint the web player itself uses, with the anonymous token out of its JS bundle.
 2. Artist credits are normalised and compared. Each suggestion lists the tracks it touches and why.
 3. For every selected track the best YouTube upload is picked, downloaded, converted, tagged and recorded in the local library so the next playlist knows what you already own.
 
@@ -138,9 +151,9 @@ Intel) and Windows (x64), each with its own PyInstaller sidecar, and attached to
 a **draft** GitHub Release. To cut one:
 
 ```bash
-python scripts/bump_version.py 0.2.0        # package.json, tauri.conf.json, Cargo.toml
-git commit -am "Release 0.2.0"
-git tag v0.2.0 && git push && git push --tags
+python scripts/bump_version.py 0.3.0        # package.json, tauri.conf.json, Cargo.toml
+git commit -am "Release 0.3.0"
+git tag v0.3.0 && git push && git push --tags
 ```
 
 When the `Release` workflow finishes, open the draft on the Releases page,
@@ -152,7 +165,11 @@ check the assets and publish it.
 | :--- | :--- | :--- |
 | `src/` | React 19, TypeScript, Tailwind 4, lucide | Preview table, folding panel, download view, settings |
 | `src-tauri/` | Tauri 2, plugins: shell, dialog, opener, log | Native window, file dialogs, sidecar lifecycle |
+| `backend/app/sources.py` | - | Which catalogue a pasted link belongs to |
 | `backend/app/spotify.py` | requests | Embed page parsing, spclient paging, album lookup |
+| `backend/app/deezer.py` | requests | api.deezer.com playlists, albums, tracks and paging |
+| `backend/app/applemusic.py` | requests | Page model parsing, amp-api paging for long playlists |
+| `backend/app/models.py` | - | The Track/Playlist shape every source maps onto |
 | `backend/app/artists.py` | pure Python | Normalisation, subset folding, feat. detection, spelling unification |
 | `backend/app/downloader.py` | yt-dlp, ffmpeg | Search, candidate scoring, download, conversion |
 | `backend/app/tags.py` | mutagen | ID3v2.3, MP4, FLAC and Opus tags with cover art |
@@ -169,6 +186,7 @@ server-sent events, one per state change, so the window never polls.
 - [ ] Per-track cover art in the preview
 - [ ] Lyrics and `.lrc` files
 - [ ] Drag and drop several links at once
+- [ ] Match a playlist across sources when one of them is missing a track
 
 ## Legal
 

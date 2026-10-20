@@ -15,15 +15,12 @@ import concurrent.futures as cf
 import json
 import logging
 import re
-import time
-from dataclasses import dataclass, field, asdict
 
-import requests
+from . import net
+from .models import Playlist, SourceError, Track, split_credit
 
 log = logging.getLogger(__name__)
 
-UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/128.0.0.0 Safari/537.36")
 EMBED = "https://open.spotify.com/embed/{kind}/{id}"
 TRACK_PAGE = "https://open.spotify.com/track/{id}"
 SPCLIENT = "https://spclient.wg.spotify.com/playlist/v2/playlist/{id}"
@@ -35,65 +32,13 @@ URL_RE = re.compile(
 )
 
 
-class SpotifyError(RuntimeError):
-    pass
-
-
-@dataclass
-class Track:
-    id: str
-    title: str
-    artists: list[str]            # as Spotify credits them, in order
-    duration_ms: int | None = None
-    album: str | None = None
-    release_date: str | None = None
-    cover_url: str | None = None
-    position: int | None = None
-    playable: bool = True
-
-    @property
-    def credit(self) -> str:
-        return ", ".join(self.artists)
-
-    def to_dict(self) -> dict:
-        d = asdict(self)
-        d["credit"] = self.credit
-        return d
-
-
-@dataclass
-class Playlist:
-    id: str
-    kind: str                     # playlist | album | track
-    name: str
-    owner: str | None
-    cover_url: str | None
-    tracks: list[Track] = field(default_factory=list)
-    total: int | None = None
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id, "kind": self.kind, "name": self.name, "owner": self.owner,
-            "cover_url": self.cover_url, "total": self.total,
-            "tracks": [t.to_dict() for t in self.tracks],
-        }
-
-
 def parse_url(url: str) -> tuple[str, str]:
     m = URL_RE.search(url.strip())
     if not m:
-        raise SpotifyError("This does not look like a Spotify playlist, album or track link.")
+        raise SourceError("This does not look like a Spotify playlist, album or track link.")
     kind = m.group(1) or m.group(3)
     sid = m.group(2) or m.group(4)
     return kind, sid
-
-
-def split_credit(subtitle: str) -> list[str]:
-    """Spotify joins credited artists with ', '. Split only on that so names
-    like 'Earth, Wind & Fire' survive as far as Spotify itself keeps them."""
-    subtitle = (subtitle or "").replace("\xa0", " ")
-    parts = [p.strip() for p in re.split(r",\s+", subtitle) if p.strip()]
-    return parts or [subtitle.strip() or "Unknown Artist"]
 
 
 def _deep_find(obj, key, depth=0):
@@ -115,41 +60,28 @@ def _deep_find(obj, key, depth=0):
 
 
 class SpotifyClient:
-    def __init__(self, session: requests.Session | None = None):
-        self.s = session or requests.Session()
-        self.s.headers.update({"user-agent": UA, "accept-language": "en-US,en;q=0.9"})
+    NAME = "spotify"
+    LABEL = "Spotify"
+
+    def __init__(self, session=None):
+        self.s = session or net.new_session()
         self._token: str | None = None
         self._token_exp = 0.0
 
+    @staticmethod
+    def matches(url: str) -> bool:
+        return bool(URL_RE.search(url.strip()))
+
     # -- low level -----------------------------------------------------------
-    def _get(self, url: str, **kw) -> requests.Response:
-        last: Exception | None = None
-        for attempt in range(4):
-            try:
-                r = self.s.get(url, timeout=30, **kw)
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                last = exc
-                time.sleep(1.5 ** attempt)
-                continue
-            if r.status_code == 429:
-                wait = float(r.headers.get("retry-after", 2 + attempt * 2))
-                log.warning("Spotify 429, waiting %.0fs", wait)
-                time.sleep(min(wait, 30))
-                continue
-            return r
-        raise SpotifyError(f"Network error talking to Spotify: {last}")
+    def _get(self, url: str, **kw):
+        return net.get(self.s, url, label=self.LABEL, **kw)
 
     def _next_data(self, url: str) -> dict:
         r = self._get(url)
-        if r.status_code in (401, 403):
-            raise SpotifyError("Spotify refused access. The playlist is private or unavailable.")
-        if r.status_code == 404:
-            raise SpotifyError("Spotify says this content does not exist.")
-        if r.status_code != 200:
-            raise SpotifyError(f"Spotify embed page returned HTTP {r.status_code}.")
-        m = NEXT_DATA_RE.search(r.text)
+        net.check(r, label=self.LABEL)
+        m = NEXT_DATA_RE.search(net.html(r))
         if not m:
-            raise SpotifyError("Spotify changed the embed page structure (no __NEXT_DATA__).")
+            raise SourceError("Spotify changed the embed page structure (no __NEXT_DATA__).")
         data = json.loads(m.group(1))
         sess = _deep_find(data, "accessToken")
         if isinstance(sess, dict):
@@ -172,8 +104,8 @@ class SpotifyClient:
             return ent
         pp = (data.get("props") or {}).get("pageProps") or {}
         if "status" in pp and "state" not in pp:
-            raise SpotifyError("Spotify returned an empty page: the content is private, removed or unavailable in your region.")
-        raise SpotifyError("Could not find playlist data in the embed page.")
+            raise SourceError("Spotify returned an empty page: the content is private, removed or unavailable in your region.")
+        raise SourceError("Could not find playlist data in the embed page.")
 
     @staticmethod
     def _cover(ent: dict) -> str | None:
@@ -199,7 +131,7 @@ class SpotifyClient:
         if kind == "track":
             t = self.track(sid)
             return Playlist(id=sid, kind="track", name=t.title, owner=t.credit,
-                            cover_url=t.cover_url, tracks=[t], total=1)
+                            cover_url=t.cover_url, tracks=[t], total=1, source=self.NAME)
         data = self._next_data(EMBED.format(kind=kind, id=sid))
         ent = self._entity(data)
         name = ent.get("name") or ent.get("title") or "Untitled"
@@ -221,12 +153,13 @@ class SpotifyClient:
                 album=album_name,
                 position=i,
                 playable=bool(tr.get("isPlayable", True)),
+                source=self.NAME,
             ))
         total = len(tracks)
         if kind == "playlist":
             tracks, total = self._extend_via_spclient(sid, tracks, seen)
-        pl = Playlist(id=sid, kind=kind, name=name, owner=owner,
-                      cover_url=self._cover(ent), tracks=tracks, total=total)
+        pl = Playlist(id=sid, kind=kind, name=name, owner=owner, cover_url=self._cover(ent),
+                      tracks=tracks, total=total, source=self.NAME)
         if enrich:
             self.enrich(pl.tracks)
         return pl
@@ -288,7 +221,7 @@ class SpotifyClient:
         t = Track(id=tid, title=ent.get("name") or ent.get("title") or "Unknown Track",
                   artists=artists or ["Unknown Artist"], duration_ms=ent.get("duration"),
                   release_date=release, cover_url=self._cover(ent),
-                  playable=bool(ent.get("isPlayable", True)))
+                  playable=bool(ent.get("isPlayable", True)), source=self.NAME)
         if with_album:
             t.album = self.album_of(tid)
         return t
@@ -299,9 +232,9 @@ class SpotifyClient:
         # a real Chrome UA gets the web player without those meta tags.
         try:
             r = self._get(TRACK_PAGE.format(id=tid), headers={"user-agent": "Mozilla/5.0"})
-        except SpotifyError:
+        except SourceError:
             return None
-        m = OG_DESC_RE.search(r.text)
+        m = OG_DESC_RE.search(net.html(r))
         if not m:
             return None
         parts = [p.strip() for p in m.group(1).split("·")]

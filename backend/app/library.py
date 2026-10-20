@@ -141,6 +141,25 @@ class Library:
         return {"tracks": row["tracks"] or 0, "artists": row["artists"] or 0,
                 "playlists": row["playlists"] or 0, "aliases": aliases or 0, "last": row["last"]}
 
+    def collection(self) -> list[dict]:
+        """Everything still on disk, filed under the folded artist name - the
+        canonical one the user confirmed, not the credit the source printed."""
+        rows = self._conn.execute(
+            "SELECT track_id, source, title, artist, credit, album, file, created FROM downloads "
+            "ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, created").fetchall()
+        out, seen = [], set()
+        for r in rows:
+            if r["file"] in seen or not os.path.exists(r["file"]):
+                continue
+            seen.add(r["file"])
+            out.append(dict(r))
+        return out
+
+    def has_file(self, path: str) -> bool:
+        """Whether this exact path is something Tunefold downloaded. The audio
+        and cover endpoints serve nothing that is not in here."""
+        return self._conn.execute("SELECT 1 FROM downloads WHERE file=? LIMIT 1", (path,)).fetchone() is not None
+
     def downloads(self, limit: int = 500) -> list[dict]:
         rows = self._conn.execute("SELECT * FROM downloads ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]

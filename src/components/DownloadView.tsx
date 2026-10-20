@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, FolderOpen, Loader2, RotateCcw, Square, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Disc3, ExternalLink, FolderOpen, Loader2, RotateCcw, Square, XCircle } from 'lucide-react'
 import { api, baseName, jobEvents } from '../api'
 import { revealPath } from '../backend'
 import type { JobSnapshot, Playlist, TrackState, TrackStatus } from '../types'
@@ -19,8 +19,9 @@ const STATUS: Record<TrackStatus, { label: string; tone: 'muted' | 'accent' | 'w
   cancelled: { label: 'Cancelled', tone: 'warn' },
 }
 
-export function DownloadView({ jobId, playlist, onBack, onRetry }: {
+export function DownloadView({ jobId, playlist, onBack, onRetry, onOpenCollection }: {
   jobId: string; playlist: Playlist; onBack: () => void; onRetry: (ids: string[]) => void
+  onOpenCollection: () => void
 }) {
   const [snap, setSnap] = useState<JobSnapshot | null>(null)
   const [tracks, setTracks] = useState<Record<string, TrackState>>({})
@@ -64,6 +65,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry }: {
             </div>
           </div>
           <div className="flex gap-2">
+            {!running && done > 0 && <Button onClick={onOpenCollection}><Disc3 size={16} /> Listen</Button>}
             {snap?.folder && <Button onClick={() => revealPath(snap.folder!)}><FolderOpen size={16} /> Open folder</Button>}
             {running
               ? <Button variant="danger" onClick={() => api.cancelJob(jobId)}><Square size={14} /> Stop</Button>

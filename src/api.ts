@@ -1,4 +1,4 @@
-import type { Alias, JobSnapshot, Preview, Recent, Settings, Stats, YtCandidate } from './types'
+import type { Alias, CollectionTrack, JobSnapshot, Preview, Recent, Settings, Stats, YtCandidate } from './types'
 
 export const PORT = 8765
 export const BASE = `http://127.0.0.1:${PORT}`
@@ -26,6 +26,7 @@ export const api = {
   settings: () => req<Settings>('/api/settings'),
   saveSettings: (patch: Partial<Settings>) => req<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   recent: () => req<Recent[]>('/api/recent'),
+  collection: () => req<CollectionTrack[]>('/api/collection'),
   stats: () => req<Stats>('/api/stats'),
   aliases: () => req<Alias[]>('/api/aliases'),
   deleteAlias: (key: string) => req<{ ok: boolean }>(`/api/aliases/${encodeURIComponent(key)}`, { method: 'DELETE' }),
@@ -61,6 +62,11 @@ export function joinPath(base: string, ...parts: string[]): string {
 export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() || path
 }
+
+/** The backend streams the audio (with range requests) and digs the cover out
+ *  of the file's own tags, so the webview needs no filesystem access at all. */
+export const audioUrl = (file: string) => `${BASE}/api/audio?path=${encodeURIComponent(file)}`
+export const coverUrl = (file: string) => `${BASE}/api/cover?path=${encodeURIComponent(file)}`
 
 /** 942278200 -> "942M", 12345 -> "12K". */
 export function fmtViews(n: number | null | undefined): string {

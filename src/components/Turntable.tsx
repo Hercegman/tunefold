@@ -1,0 +1,153 @@
+import { useEffect, useRef, useState } from 'react'
+
+/** Geometry, in the SVG's own units. The arm is a real one: it pivots off to
+ *  the side and its stylus has to land on the groove, so the two end angles
+ *  are solved from the pivot distance rather than eyeballed. */
+const C = { x: 250, y: 280 }
+const R = 210
+const PIVOT = { x: 520, y: 92 }
+const ARM = 250
+const R_OUT = R * 0.95          // outer groove, where a side starts
+const R_LABEL = R * 0.46        // the paper label, where it runs out
+const RPM = 33 + 1 / 3
+const SPIN_MS = (60 / RPM) * 1000   // 1800 ms per turn, the real thing
+
+/** Where the stylus sits for a given arm angle. SVG rotates the other way
+ *  round from the usual maths convention once y points down, hence the minus:
+ *  a positive angle swings the arm left, in over the record. */
+const stylusAt = (t: number) => ({
+  x: PIVOT.x - ARM * Math.sin(t),
+  y: PIVOT.y + ARM * Math.cos(t),
+})
+
+const radiusAt = (t: number) => {
+  const s = stylusAt(t)
+  return Math.hypot(s.x - C.x, s.y - C.y)
+}
+
+function angleFor(target: number): number {
+  let lo = -0.3, hi = 1.1          // radius shrinks as the arm swings in
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2
+    if (radiusAt(mid) > target) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+const A_START = angleFor(R_OUT)     // outer groove
+const A_END = angleFor(R_LABEL)     // run-out, by the label
+const A_REST = -0.08                // parked, clear of the record
+const deg = (rad: number) => (rad * 180) / Math.PI
+
+const reducedMotion = () =>
+  typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+export function Turntable({ cover, progress, playing, swapping, trackKey, onSeek }: {
+  cover: string | null
+  progress: number
+  playing: boolean
+  /** True for the moment between records: the arm lifts, a new disc drops in. */
+  swapping: boolean
+  trackKey: string
+  onSeek: (progress: number) => void
+}) {
+  const svg = useRef<SVGSVGElement>(null)
+  const disc = useRef<SVGGElement>(null)
+  const [drag, setDrag] = useState<number | null>(null)
+
+  // Rotation is driven frame by frame rather than by a CSS animation, so the
+  // platter can spin up and coast down instead of snapping between states -
+  // and requestAnimationFrame stops on its own when the window is hidden.
+  useEffect(() => {
+    if (reducedMotion()) return
+    let raf = 0
+    let last = performance.now()
+    let angle = 0
+    let speed = 0
+    const tick = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.1)
+      last = now
+      const target = playing && !swapping ? 360 / (SPIN_MS / 1000) : 0
+      speed += (target - speed) * Math.min(1, dt * 3.5)
+      angle = (angle + speed * dt) % 360
+      if (disc.current) disc.current.style.transform = `rotate(${angle}deg)`
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, swapping, trackKey])
+
+  const shown = drag ?? progress
+  const armAngle = swapping || !trackKey ? A_REST : A_START + shown * (A_END - A_START)
+
+  const toProgress = (e: React.PointerEvent): number | null => {
+    const node = svg.current
+    const ctm = node?.getScreenCTM()
+    if (!node || !ctm) return null
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse())
+    const t = Math.atan2(PIVOT.x - p.x, p.y - PIVOT.y)
+    return Math.max(0, Math.min(1, (t - A_START) / (A_END - A_START)))
+  }
+
+  return (
+    <svg ref={svg} viewBox="0 0 620 560" className="h-full w-full select-none"
+      onPointerMove={(e) => { if (drag !== null) { const p = toProgress(e); if (p !== null) setDrag(p) } }}
+      onPointerUp={() => { if (drag !== null) { onSeek(drag); setDrag(null) } }}
+      onPointerLeave={() => { if (drag !== null) { onSeek(drag); setDrag(null) } }}>
+      <defs>
+        <clipPath id="tf-label"><circle cx={C.x} cy={C.y} r={R_LABEL - 3} /></clipPath>
+        <radialGradient id="tf-vinyl" cx="50%" cy="50%">
+          <stop offset="40%" stopColor="#15171c" />
+          <stop offset="85%" stopColor="#0c0d10" />
+          <stop offset="100%" stopColor="#1a1d23" />
+        </radialGradient>
+        <linearGradient id="tf-sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.07" />
+          <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.05" />
+        </linearGradient>
+      </defs>
+
+      {/* platter */}
+      <circle cx={C.x} cy={C.y} r={R + 26} fill="#16181d" stroke="#2a2e37" />
+      <circle cx={C.x} cy={C.y} r={R + 10} fill="#101217" />
+
+      <g key={trackKey} ref={disc} className="tf-disc" style={{ transformOrigin: `${C.x}px ${C.y}px` }}>
+        <circle cx={C.x} cy={C.y} r={R} fill="url(#tf-vinyl)" />
+        {Array.from({ length: 16 }, (_, i) => R_LABEL + 8 + i * ((R_OUT - R_LABEL - 8) / 16)).map((r) => (
+          <circle key={r} cx={C.x} cy={C.y} r={r} fill="none" stroke="#ffffff" strokeOpacity={0.07} strokeWidth="1" />
+        ))}
+        <circle cx={C.x} cy={C.y} r={R} fill="url(#tf-sheen)" />
+        <circle cx={C.x} cy={C.y} r={R_LABEL} fill="#1ed760" />
+        {cover && (
+          <image href={cover} clipPath="url(#tf-label)" preserveAspectRatio="xMidYMid slice"
+            x={C.x - R_LABEL} y={C.y - R_LABEL} width={R_LABEL * 2} height={R_LABEL * 2} />
+        )}
+        <circle cx={C.x} cy={C.y} r={R_LABEL} fill="none" stroke="#000000" strokeOpacity="0.35" />
+        <circle cx={C.x} cy={C.y} r="7" fill="#0e0f12" />
+      </g>
+
+      {/* tonearm: the progress bar, and the way to scrub */}
+      <g className="tf-arm" style={{
+        transform: `rotate(${deg(armAngle)}deg)`,
+        transformOrigin: `${PIVOT.x}px ${PIVOT.y}px`,
+        transition: drag !== null ? 'none'
+          : swapping ? 'transform 600ms cubic-bezier(.4,0,.2,1)'
+          : 'transform 260ms linear',
+      }}>
+        <line x1={PIVOT.x} y1={PIVOT.y} x2={PIVOT.x} y2={PIVOT.y + ARM - 22}
+          stroke="#8b91a0" strokeWidth="7" strokeLinecap="round" />
+        <rect x={PIVOT.x - 13} y={PIVOT.y + ARM - 30} width="26" height="30" rx="5" fill="#c3c8d4" />
+        <circle cx={PIVOT.x} cy={PIVOT.y + ARM - 2} r="3.5" fill="#1ed760" />
+        <rect x={PIVOT.x - 11} y={PIVOT.y - 52} width="22" height="34" rx="8" fill="#6c7383" />
+        <line x1={PIVOT.x} y1={PIVOT.y + 6} x2={PIVOT.x} y2={PIVOT.y + ARM - 22}
+          stroke="transparent" strokeWidth="42" style={{ cursor: 'grab', pointerEvents: 'stroke' }}
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setDrag(progress) }} />
+      </g>
+      <circle cx={PIVOT.x} cy={PIVOT.y} r="17" fill="#2a2e37" stroke="#434a58" />
+      <circle cx={PIVOT.x} cy={PIVOT.y} r="5" fill="#0e0f12" />
+    </svg>
+  )
+}

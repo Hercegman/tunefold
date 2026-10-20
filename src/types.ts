@@ -116,4 +116,16 @@ export interface Stats {
   last: number | null
 }
 
+/** One file in the local collection, filed under the folded artist name. */
+export interface CollectionTrack {
+  track_id: string
+  source: SourceName
+  title: string
+  artist: string
+  credit: string
+  album: string | null
+  file: string
+  created: number
+}
+
 export interface Alias { credit_key: string; credit: string; canonical: string; created: number }

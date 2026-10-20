@@ -25,3 +25,14 @@ input, select { color-scheme: dark; }
 .spin { animation: spin 1s linear infinite; }
 .row-in { animation: rowin .25s ease both; }
 @keyframes rowin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* a new record dropping onto the platter */
+.tf-disc { animation: tf-drop .55s cubic-bezier(.2,.8,.3,1); }
+@keyframes tf-drop {
+  from { opacity: 0; transform: scale(.88) translateY(-26px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tf-disc { animation: none; }
+  .tf-arm { transition: none !important; }
+}

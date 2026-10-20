@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Disc3, Loader2, Pause, Play } from 'lucide-react'
 
 type Variant = 'primary' | 'ghost' | 'danger' | 'outline'
 
@@ -68,5 +68,23 @@ export function BackButton({ onClick, className = '' }: { onClick: () => void; c
     <Button variant="ghost" onClick={onClick} title="Back (Esc)" aria-label="Back" className={`px-2 ${className}`}>
       <ArrowLeft size={18} />
     </Button>
+  )
+}
+
+export function NowPlaying({ title, subtitle, playing, onToggle, onOpen }: {
+  title: string; subtitle: string; playing: boolean; onToggle: () => void; onOpen: () => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-t border-line bg-panel px-4 py-2">
+      <button onClick={onToggle} aria-label={playing ? 'Pause' : 'Play'}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg transition hover:brightness-110">
+        {playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+      </button>
+      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <div className="truncate text-sm font-medium">{title}</div>
+        <div className="truncate text-xs text-muted">{subtitle}</div>
+      </button>
+      <Button variant="ghost" onClick={onOpen}><Disc3 size={15} className={playing ? 'spin' : ''} /></Button>
+    </div>
   )
 }

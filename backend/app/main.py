@@ -14,9 +14,9 @@ import uuid
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -26,7 +26,7 @@ from .library import Library
 from .models import SourceError, Track
 from .sources import LABELS, for_url
 from .sources import get as source_for
-from .tags import fetch_cover, write_tags
+from .tags import fetch_cover, read_cover, write_tags
 
 log = logging.getLogger("backend")
 app = FastAPI(title="Tunefold backend")
@@ -302,6 +302,70 @@ def stats():
 @app.get("/api/library")
 def library():
     return lib.downloads()
+
+
+# ------------------------------------------------- the local collection
+AUDIO_TYPES = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "opus": "audio/ogg",
+               "flac": "audio/flac", "wav": "audio/wav"}
+RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
+CHUNK = 256 * 1024
+
+
+@app.get("/api/collection")
+def collection():
+    return lib.collection()
+
+
+def _owned(path: str) -> str:
+    """A path Tunefold downloaded and still has. Everything else is a 404:
+    the download history is the whole whitelist these two routes serve."""
+    if not lib.has_file(path) or not os.path.exists(path):
+        raise HTTPException(404, "not in your collection")
+    return path
+
+
+@app.get("/api/audio")
+def audio(path: str, request: Request):
+    """The file itself, with range requests so the player can seek."""
+    _owned(path)
+    media = AUDIO_TYPES.get(path.rsplit(".", 1)[-1].lower(), "application/octet-stream")
+    size = os.path.getsize(path)
+    m = RANGE_RE.match(request.headers.get("range") or "")
+    if not m:
+        return FileResponse(path, media_type=media, headers={"accept-ranges": "bytes"})
+    start = int(m.group(1)) if m.group(1) else 0
+    end = int(m.group(2)) if m.group(2) else size - 1
+    start, end = max(0, start), min(end, size - 1)
+    if start > end:
+        return Response(status_code=416, headers={"content-range": f"bytes */{size}"})
+
+    def body():
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            left = end - start + 1
+            while left > 0:
+                data = fh.read(min(CHUNK, left))
+                if not data:
+                    break
+                left -= len(data)
+                yield data
+
+    return StreamingResponse(body(), status_code=206, media_type=media, headers={
+        "content-range": f"bytes {start}-{end}/{size}",
+        "accept-ranges": "bytes",
+        "content-length": str(end - start + 1),
+    })
+
+
+@app.get("/api/cover")
+def cover(path: str):
+    """The artwork written into the file when it was tagged."""
+    _owned(path)
+    art = read_cover(path)
+    if not art:
+        raise HTTPException(404, "no embedded cover")
+    data, mime = art
+    return Response(data, media_type=mime, headers={"cache-control": "max-age=86400"})
 
 
 @app.get("/api/sources")

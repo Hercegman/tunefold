@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Settings as SettingsIcon } from 'lucide-react'
+import { Disc3, Loader2, Settings as SettingsIcon } from 'lucide-react'
 import { api } from './api'
 import { ensureBackend } from './backend'
 import { log } from './log'
 import { useNav } from './nav'
+import { usePlayer } from './player'
+import { Collection } from './components/Collection'
 import { DownloadView } from './components/DownloadView'
 import { Home } from './components/Home'
 import { Preview, type StartPayload } from './components/Preview'
 import { SettingsDialog } from './components/SettingsDialog'
-import { Button } from './components/ui'
+import { Button, NowPlaying } from './components/ui'
 import type { Preview as PreviewT, Settings } from './types'
 
-type View = { name: 'home' } | { name: 'preview' } | { name: 'download'; jobId: string }
+type View = { name: 'home' } | { name: 'preview' } | { name: 'download'; jobId: string } | { name: 'collection' }
 
 export default function App() {
   const [boot, setBoot] = useState<'loading' | 'ready' | string>('loading')
@@ -24,6 +26,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [lastPayload, setLastPayload] = useState<StartPayload | null>(null)
   const [job, setJob] = useState<{ id: string; playlistId: string } | null>(null)
+  const player = usePlayer()
 
   useEffect(() => {
     (async () => {
@@ -102,7 +105,8 @@ export default function App() {
     <div className="flex h-full flex-col">
       {view.name === 'home' && (
         <>
-          <div className="flex justify-end px-4 pt-3">
+          <div className="flex justify-end gap-1 px-4 pt-3">
+            <Button variant="ghost" onClick={() => go({ name: 'collection' })}><Disc3 size={16} /> Collection</Button>
             <Button variant="ghost" onClick={() => setShowSettings(true)}><SettingsIcon size={16} /> Settings</Button>
           </div>
           <Home url={url} onUrlChange={setUrl} onSubmit={preview} busy={busy} error={error}
@@ -116,10 +120,16 @@ export default function App() {
             ? () => go({ name: 'download', jobId: job.id }) : undefined} />
       )}
       {view.name === 'download' && data && (
-        <DownloadView jobId={view.jobId} playlist={data.playlist} onRetry={retry} onBack={back} />
+        <DownloadView jobId={view.jobId} playlist={data.playlist} onRetry={retry} onBack={back}
+          onOpenCollection={() => go({ name: 'collection' })} />
       )}
+      {view.name === 'collection' && <Collection player={player} onBack={back} />}
       {error && view.name !== 'home' && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg border border-danger/40 bg-panel px-4 py-2 text-sm text-danger shadow-xl" onClick={() => setError(null)}>{error}</div>
+      )}
+      {player.current && view.name !== 'collection' && (
+        <NowPlaying title={player.current.title} subtitle={player.current.artist}
+          playing={player.playing} onToggle={player.toggle} onOpen={() => go({ name: 'collection' })} />
       )}
       {showSettings && <SettingsDialog settings={settings} onChange={setSettings} onClose={() => setShowSettings(false)} />}
     </div>

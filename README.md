@@ -4,7 +4,7 @@
 
 # Tunefold
 
-**Turn Spotify, Deezer and Apple Music playlists into neatly tagged audio files. Fold messy artist credits into one clean name.**
+**Turn Spotify, Deezer and Apple Music playlists into neatly tagged audio files. Fold messy artist credits into one clean name, then play the result on a turntable.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-1ed760?style=flat-square&labelColor=0e0f12)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-8b91a0?style=flat-square&labelColor=0e0f12)](#build)
@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white&labelColor=0e0f12)](https://python.org)
 [![yt-dlp](https://img.shields.io/badge/audio-yt--dlp%20%2B%20ffmpeg-ff5d5d?style=flat-square&labelColor=0e0f12)](https://github.com/yt-dlp/yt-dlp)
 
-[Why](#why-tunefold) · [Features](#features) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
+[Why](#why-tunefold) · [Features](#features) · [Player](#the-turntable) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
 
 </div>
 
@@ -62,11 +62,38 @@ The decision is remembered and applied to every playlist after that.
 - **Your layout.** One folder per playlist, `Artist/`, or `Artist/Album/`. File names as `Artist - Track`, `Track - Artist` or just `Track`, with optional `01.` prefixes.
 - **Resumable.** Tracks already on disk are skipped. Stop any time, retry only what failed.
 - **Parallel downloads** with live per-track progress.
+- **A turntable, not a track list.** What you downloaded plays in the app, filed under the folded artist name - see [the turntable](#the-turntable).
 - **Back goes back.** The arrow and Escape step one screen back, and so do the webview's own back gestures, which an app without a history stack silently swallows. Leaving a running download no longer cancels it or reloads the playlist - the Download button on the preview leads straight back in.
 
 <div align="center">
 <img src="docs/screenshots/download.png" alt="Download progress" width="860" />
 </div>
+
+## The turntable
+
+<div align="center">
+<img src="docs/screenshots/player.png" alt="The collection playing on a turntable" width="860" />
+</div>
+
+The sidebar is the point of the whole app made visible: one entry per artist,
+under the name **you** confirmed, not the credit three different services
+printed. It is read from the download history, so it only ever lists files that
+are still on disk.
+
+The arm is the progress bar. It starts on the outer groove and travels inward
+as the side plays, the way a record actually does, and dragging it scrubs.
+The platter turns at 33⅓ rpm - 1.8 seconds a revolution, the real figure -
+spinning up and coasting down instead of snapping between states. When a track
+ends the arm lifts, a new record drops onto the platter and the arm sets back
+down on the outer groove. The audio never waits for any of that: the next track
+starts immediately and the choreography plays over it.
+
+The label in the middle is the cover art read out of the file's own tags, so it
+works offline and for everything downloaded before there was a player.
+
+Playing something and then leaving the screen keeps it playing, with a strip at
+the bottom to pause it or go back. Space plays and pauses, the arrows seek, and
+`prefers-reduced-motion` turns the animation off.
 
 ## Compared to other downloaders
 
@@ -79,6 +106,7 @@ The decision is remembered and applied to every playlist after that.
 | See the track list before downloading | Yes, and pick row by row | No | No |
 | Artist credit clean-up | Yes, and remembered for later playlists | No | No |
 | Choose which YouTube upload | Yes, per track, remembered | No | n/a |
+| Plays what it downloaded | Yes | No | No |
 | Scriptable | No | Yes | Yes |
 
 Be honest about which one you want. **spotDL** is far more mature than this, has
@@ -175,11 +203,17 @@ check the assets and publish it.
 | `backend/app/artists.py` | pure Python | Normalisation, subset folding, feat. detection, spelling unification |
 | `backend/app/downloader.py` | yt-dlp, ffmpeg | Search, candidate scoring, download, conversion |
 | `backend/app/tags.py` | mutagen | ID3v2.3, MP4, FLAC and Opus tags with cover art |
-| `backend/app/library.py` | SQLite | Settings, saved artist rules, download history |
+| `backend/app/library.py` | SQLite | Settings, saved artist rules, download history, chosen uploads |
+| `src/player.ts`, `src/components/Turntable.tsx` | React, SVG | One audio element for the app, the platter and the arm |
 | `backend/app/main.py` | FastAPI, SSE | HTTP API and live progress stream |
 
 The UI talks to the backend over HTTP on `127.0.0.1:8765`. Progress arrives as
 server-sent events, one per state change, so the window never polls.
+
+Audio is streamed by the backend with range requests rather than handed to the
+webview as a file, which keeps seeking working and means the player needs no
+filesystem permissions at all. Both `/api/audio` and `/api/cover` serve only
+paths that appear in the download history; everything else is a 404.
 
 ## Roadmap
 

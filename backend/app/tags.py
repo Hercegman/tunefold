@@ -30,6 +30,31 @@ def fetch_cover(url: str | None) -> bytes | None:
         return None
 
 
+def read_cover(path: str) -> tuple[bytes, str] | None:
+    """The cover art already inside the file, so the player needs no network
+    and works for everything downloaded before there was a player."""
+    ext = path.rsplit(".", 1)[-1].lower()
+    try:
+        if ext == "mp3":
+            for frame in ID3(path).getall("APIC"):
+                return frame.data, frame.mime or _mime(frame.data)
+        elif ext == "m4a":
+            for art in (MP4(path).get("covr") or []):
+                return bytes(art), "image/png" if art.imageformat == MP4Cover.FORMAT_PNG else "image/jpeg"
+        elif ext == "flac":
+            for pic in FLAC(path).pictures:
+                return pic.data, pic.mime or _mime(pic.data)
+        elif ext == "opus":
+            import base64
+            from mutagen.flac import Picture as FlacPicture
+            for blob in (OggOpus(path).get("metadata_block_picture") or []):
+                pic = FlacPicture(base64.b64decode(blob))
+                return pic.data, pic.mime or _mime(pic.data)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("cover in %s: %s", path, exc)
+    return None
+
+
 def _mime(data: bytes) -> str:
     return "image/png" if data[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
 

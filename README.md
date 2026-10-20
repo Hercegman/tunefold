@@ -96,6 +96,14 @@ Playing something and then leaving the screen keeps it playing, with a strip at
 the bottom to pause it or go back. Space plays and pauses, the arrows seek, and
 `prefers-reduced-motion` turns the animation off.
 
+> **Linux:** the window decodes audio through GStreamer rather than carrying its
+> own decoders, so a machine without the plugin packages cannot play an MP3
+> however healthy the file is. The `.deb` and `.rpm` ask for them; for the
+> AppImage, or on Arch, install them yourself:
+> `gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav`
+> (`gstreamer1.0-*` on Debian and Ubuntu). The player says so when it hits this
+> rather than sitting there silently.
+
 ## Compared to other downloaders
 
 |  | Tunefold | [spotDL](https://github.com/spotDL/spotify-downloader) | [Zotify](https://github.com/zotify-dev/zotify) |

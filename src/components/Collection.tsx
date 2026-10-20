@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Disc3, Loader2, Pause, Play, SkipBack, SkipForward } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, Disc3, Loader2, Pause, Play, SkipBack, SkipForward } from 'lucide-react'
 import { api, coverUrl, fmtSeconds } from '../api'
 import type { PlayerState } from '../player'
 import type { CollectionTrack } from '../types'
@@ -131,6 +131,12 @@ export function Collection({ player, onBack }: { player: PlayerState; onBack: ()
           <div className="mt-2 flex items-center justify-center gap-2 text-xs tabular-nums text-muted">
             <span>{fmtSeconds(player.time)}</span><span>/</span><span>{fmtSeconds(player.duration)}</span>
           </div>
+          {player.error && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-left text-xs text-danger">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{player.error}</span>
+            </div>
+          )}
         </div>
       </main>
     </div>

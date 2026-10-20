@@ -62,6 +62,10 @@ export function Turntable({ cover, progress, playing, swapping, trackKey, onSeek
   const disc = useRef<SVGGElement>(null)
   const platter = useRef<SVGGElement>(null)
   const [drag, setDrag] = useState<number | null>(null)
+  // A cover that will not load leaves a broken-image glyph in the middle of
+  // the record; the plain green label is the better fallback.
+  const [noArt, setNoArt] = useState<string | null>(null)
+  const showArt = Boolean(cover) && noArt !== trackKey
 
   // Rotation is driven frame by frame rather than by a CSS animation, so the
   // platter can spin up and coast down instead of snapping between states -
@@ -152,10 +156,11 @@ export function Turntable({ cover, progress, playing, swapping, trackKey, onSeek
           <circle key={r} cx={C.x} cy={C.y} r={r} fill="none" stroke="#ffffff" strokeOpacity={0.07} strokeWidth="1" />
         ))}
         <circle cx={C.x} cy={C.y} r={R_REC} fill="url(#tf-sheen)" />
-        <circle cx={C.x} cy={C.y} r={R_LABEL} fill={cover ? '#0b0d10' : '#1ed760'} />
-        {cover && (
-          <image href={cover} clipPath="url(#tf-label)" preserveAspectRatio="xMidYMid slice"
-            x={C.x - R_LABEL} y={C.y - R_LABEL} width={R_LABEL * 2} height={R_LABEL * 2} />
+        <circle cx={C.x} cy={C.y} r={R_LABEL} fill={showArt ? '#0b0d10' : '#1ed760'} />
+        {showArt && (
+          <image href={cover!} clipPath="url(#tf-label)" preserveAspectRatio="xMidYMid slice"
+            x={C.x - R_LABEL} y={C.y - R_LABEL} width={R_LABEL * 2} height={R_LABEL * 2}
+            onError={() => setNoArt(trackKey)} />
         )}
         <circle cx={C.x} cy={C.y} r={R_LABEL} fill="none" stroke="#000000" strokeOpacity="0.45" strokeWidth="2" />
         <circle cx={C.x} cy={C.y} r="6" fill="#0e0f12" />

@@ -122,7 +122,8 @@ export default function App() {
             <Button variant="ghost" onClick={() => setShowSettings(true)}><SettingsIcon size={16} /> Settings</Button>
           </div>
           <Home url={url} onUrlChange={setUrl} onSubmit={preview} busy={busy} error={error}
-            settings={settings} onOpenSettings={() => setShowSettings(true)} />
+            settings={settings} onOpenSettings={() => setShowSettings(true)}
+            onOpenCollection={() => go({ name: 'collection' })} />
         </>
       )}
       {view.name === 'preview' && data && (

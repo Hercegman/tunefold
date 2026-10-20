@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Clock, Download, FolderOpen, Link2, Sparkles } from 'lucide-react'
+import { ArrowRight, Clock, Disc3, Download, FolderOpen, Link2, Play, Sparkles } from 'lucide-react'
 import { api } from '../api'
 import { LINK_RE, SOURCE_NAMES, SOURCES, sourceLabel } from '../sources'
 import type { Recent, Settings, Stats } from '../types'
@@ -67,7 +67,7 @@ function StatRow({ stats }: { stats: Stats }) {
   )
 }
 
-export function Home({ url, onUrlChange, onSubmit, busy, error, settings, onOpenSettings }: {
+export function Home({ url, onUrlChange, onSubmit, busy, error, settings, onOpenSettings, onOpenCollection }: {
   url: string
   onUrlChange: (url: string) => void
   onSubmit: (url: string) => void
@@ -75,6 +75,7 @@ export function Home({ url, onUrlChange, onSubmit, busy, error, settings, onOpen
   error: string | null
   settings: Settings
   onOpenSettings: () => void
+  onOpenCollection: () => void
 }) {
   const [recent, setRecent] = useState<Recent[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -122,6 +123,22 @@ export function Home({ url, onUrlChange, onSubmit, busy, error, settings, onOpen
       {error && <div className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
 
       {stats !== null && (used ? <StatRow stats={stats} /> : <Steps />)}
+
+      {used && stats && (
+        <button onClick={onOpenCollection}
+          className="group flex w-full items-center gap-4 rounded-xl border border-accent/30 bg-panel p-4 text-left transition hover:border-accent/60 hover:bg-panel-2">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg transition group-hover:brightness-110">
+            <Play size={20} className="ml-0.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-semibold tracking-tight">Play your collection</span>
+            <span className="block text-sm text-muted">
+              {stats.tracks.toLocaleString()} {stats.tracks === 1 ? 'track' : 'tracks'} · {stats.artists.toLocaleString()} {stats.artists === 1 ? 'artist' : 'artists'}, on a turntable
+            </span>
+          </span>
+          <Disc3 size={20} className="shrink-0 text-muted transition group-hover:text-accent" />
+        </button>
+      )}
 
       {recent.length > 0 && (
         <section>

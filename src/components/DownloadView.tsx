@@ -66,7 +66,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry, onOpenCollectio
             </div>
           </div>
           <div className="flex gap-2">
-            {!running && done > 0 && <Button onClick={onOpenCollection}><Disc3 size={16} /> Listen</Button>}
+            {done > 0 && <Button onClick={onOpenCollection}><Disc3 size={16} /> Listen</Button>}
             {snap?.folder && <Button onClick={() => revealPath(snap.folder!)}><FolderOpen size={16} /> Open folder</Button>}
             {running
               ? <Button variant="danger" onClick={() => api.cancelJob(jobId)}><Square size={14} /> Stop</Button>

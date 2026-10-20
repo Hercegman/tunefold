@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ExternalLink, FolderOpen, Loader2, RotateCcw, Square, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, FolderOpen, Loader2, RotateCcw, Square, XCircle } from 'lucide-react'
 import { api, baseName, jobEvents } from '../api'
 import { revealPath } from '../backend'
 import type { JobSnapshot, Playlist, TrackState, TrackStatus } from '../types'
+import { VersionPicker } from './VersionPicker'
 import { BackButton, Badge, Button, Cover } from './ui'
 
 const STATUS: Record<TrackStatus, { label: string; tone: 'muted' | 'accent' | 'warn' | 'danger' | 'info' }> = {
@@ -23,6 +24,7 @@ export function DownloadView({ jobId, playlist, onBack, onRetry }: {
 }) {
   const [snap, setSnap] = useState<JobSnapshot | null>(null)
   const [tracks, setTracks] = useState<Record<string, TrackState>>({})
+  const [picking, setPicking] = useState<string | null>(null)
 
   useEffect(() => {
     setTracks({}); setSnap(null)
@@ -77,30 +79,46 @@ export function DownloadView({ jobId, playlist, onBack, onRetry }: {
         {list.map((t) => {
           const s = STATUS[t.status]
           const active = ['metadata', 'searching', 'downloading', 'converting', 'tagging'].includes(t.status)
+          const open = picking === t.id
           return (
-            <div key={t.id} className="flex items-center gap-3 border-b border-line/60 py-2.5">
-              <Cover url={covers[t.id]} size={40} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium">{t.title}</span>
-                  <span className="truncate text-sm text-muted">· {t.artist}</span>
-                </div>
-                <div className="mt-0.5 truncate text-xs text-muted">
-                  {t.status === 'failed' ? <span className="text-danger">{t.error}</span>
-                    : t.yt_title ? <span className="inline-flex items-center gap-1">YouTube: {t.yt_title}{t.yt_url && <a href={t.yt_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-muted hover:text-fg"><ExternalLink size={11} /></a>}</span>
-                    : t.file ? baseName(t.file) : ''}
-                </div>
-                {active && (
-                  <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-panel-2">
-                    <div className={`h-full rounded-full bg-info transition-all ${t.status !== 'downloading' ? 'animate-pulse' : ''}`} style={{ width: `${t.status === 'downloading' ? t.progress : (t.status === 'tagging' || t.status === 'converting') ? 99 : 8}%` }} />
+            <div key={t.id} className="border-b border-line/60 py-2.5">
+              <div className="flex items-center gap-3">
+                <Cover url={covers[t.id]} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium">{t.title}</span>
+                    <span className="truncate text-sm text-muted">· {t.artist}</span>
                   </div>
-                )}
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+                    <span className="truncate">
+                      {t.status === 'failed' ? <span className="text-danger">{t.error}</span>
+                        : t.yt_title ? <span className="inline-flex items-center gap-1">YouTube: {t.yt_title}{t.yt_url && <a href={t.yt_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-muted hover:text-fg"><ExternalLink size={11} /></a>}</span>
+                        : t.file ? baseName(t.file) : ''}
+                    </span>
+                    {!active && (
+                      <button onClick={() => setPicking(open ? null : t.id)}
+                        className="inline-flex shrink-0 items-center gap-0.5 text-muted transition hover:text-fg">
+                        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        Other versions
+                      </button>
+                    )}
+                  </div>
+                  {active && (
+                    <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-panel-2">
+                      <div className={`h-full rounded-full bg-info transition-all ${t.status !== 'downloading' ? 'animate-pulse' : ''}`} style={{ width: `${t.status === 'downloading' ? t.progress : (t.status === 'tagging' || t.status === 'converting') ? 99 : 8}%` }} />
+                    </div>
+                  )}
+                </div>
+                <div className="w-36 text-right">
+                  {t.status === 'done' || t.status === 'skipped' ? <span className="inline-flex items-center gap-1 text-xs text-accent"><CheckCircle2 size={14} /> {s.label}</span>
+                    : t.status === 'failed' ? <span className="inline-flex items-center gap-1 text-xs text-danger"><XCircle size={14} /> {s.label}</span>
+                    : <Badge tone={s.tone}>{s.label}{t.status === 'downloading' ? ` ${t.progress}%` : ''}</Badge>}
+                </div>
               </div>
-              <div className="w-36 text-right">
-                {t.status === 'done' || t.status === 'skipped' ? <span className="inline-flex items-center gap-1 text-xs text-accent"><CheckCircle2 size={14} /> {s.label}</span>
-                  : t.status === 'failed' ? <span className="inline-flex items-center gap-1 text-xs text-danger"><XCircle size={14} /> {s.label}</span>
-                  : <Badge tone={s.tone}>{s.label}{t.status === 'downloading' ? ` ${t.progress}%` : ''}</Badge>}
-              </div>
+              {open && (
+                <VersionPicker jobId={jobId} trackId={t.id} chosen={t.chosen} seed={t.alternatives}
+                  onPicked={() => setPicking(null)} />
+              )}
             </div>
           )
         })}

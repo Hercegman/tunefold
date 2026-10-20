@@ -55,6 +55,20 @@ export interface Settings {
   cookies: string
 }
 
+/** One YouTube upload the search turned up for a track. */
+export interface YtCandidate {
+  id: string
+  url: string
+  title: string
+  duration: number | null        // seconds
+  views: number | null
+  channel: string | null
+  verified: boolean
+  tags: string[]                 // live, remix, altered, cover, lyrics, full
+  off: number | null             // seconds away from the source duration
+  eligible: boolean              // false: the automatic pick would refuse it
+}
+
 export type TrackStatus =
   | 'queued' | 'metadata' | 'searching' | 'downloading' | 'converting' | 'tagging' | 'done' | 'skipped' | 'failed' | 'cancelled'
 
@@ -69,6 +83,8 @@ export interface TrackState {
   yt_url?: string
   file?: string
   error?: string
+  chosen?: string                // id of the upload this track was taken from
+  alternatives?: YtCandidate[]
 }
 
 export interface JobSnapshot {

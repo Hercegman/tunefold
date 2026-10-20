@@ -1,4 +1,4 @@
-import type { Alias, JobSnapshot, Preview, Recent, Settings, Stats } from './types'
+import type { Alias, JobSnapshot, Preview, Recent, Settings, Stats, YtCandidate } from './types'
 
 export const PORT = 8765
 export const BASE = `http://127.0.0.1:${PORT}`
@@ -32,6 +32,14 @@ export const api = {
   createJob: (body: unknown) => req<JobSnapshot>('/api/jobs', { method: 'POST', body: JSON.stringify(body) }),
   cancelJob: (id: string) => req<{ ok: boolean }>(`/api/jobs/${id}/cancel`, { method: 'POST' }),
   job: (id: string) => req<JobSnapshot>(`/api/jobs/${id}`),
+  trackVersions: (jobId: string, trackId: string, q?: string) =>
+    req<{ candidates: YtCandidate[] }>(
+      `/api/jobs/${jobId}/tracks/${encodeURIComponent(trackId)}/versions${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  chooseVersion: (jobId: string, trackId: string, c: YtCandidate) =>
+    req<JobSnapshot>(`/api/jobs/${jobId}/tracks/${encodeURIComponent(trackId)}/version`, {
+      method: 'POST',
+      body: JSON.stringify({ video_id: c.id, title: c.title, duration: c.duration }),
+    }),
 }
 
 export function jobEvents(id: string, onEvent: (ev: Record<string, unknown>) => void): () => void {
@@ -52,6 +60,22 @@ export function joinPath(base: string, ...parts: string[]): string {
 
 export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() || path
+}
+
+/** 942278200 -> "942M", 12345 -> "12K". */
+export function fmtViews(n: number | null | undefined): string {
+  if (!n) return '–'
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
+  if (n >= 1e6) return `${Math.round(n / 1e6)}M`
+  if (n >= 1e3) return `${Math.round(n / 1e3)}K`
+  return String(n)
+}
+
+/** Seconds, as the YouTube search reports them. */
+export function fmtSeconds(s: number | null | undefined): string {
+  if (!s && s !== 0) return '–'
+  const t = Math.round(s)
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
 }
 
 export function fmtDuration(ms: number | null | undefined): string {

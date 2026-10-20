@@ -47,6 +47,9 @@ class Library:
                 file TEXT NOT NULL, created REAL NOT NULL, PRIMARY KEY(track_id, file));
             CREATE TABLE IF NOT EXISTS recent(
                 url TEXT PRIMARY KEY, kind TEXT, name TEXT, owner TEXT, cover_url TEXT, total INTEGER, seen REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS track_choices(
+                source TEXT NOT NULL, track_id TEXT NOT NULL, video_id TEXT NOT NULL, title TEXT,
+                duration REAL, created REAL NOT NULL, PRIMARY KEY(source, track_id));
             """)
             # Tunefold 0.2 knew only Spotify, so rows without a source are Spotify's.
             # Track ids are only unique per source (Deezer and Apple both number theirs).
@@ -112,6 +115,22 @@ class Library:
             if os.path.exists(r["file"]):
                 out[r["track_id"]] = r["file"]
         return out
+
+    # chosen YouTube uploads
+    def choice(self, source: str, track_id: str) -> dict | None:
+        """The upload the user picked by hand for this track, if any."""
+        r = self._conn.execute("SELECT video_id, title, duration FROM track_choices WHERE source=? AND track_id=?",
+                               (source, track_id)).fetchone()
+        return dict(r) if r else None
+
+    def save_choice(self, source: str, track_id: str, video_id: str, title: str | None, duration: float | None) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("INSERT OR REPLACE INTO track_choices VALUES(?,?,?,?,?,?)",
+                               (source, track_id, video_id, title, duration, time.time()))
+
+    def forget_choice(self, source: str, track_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM track_choices WHERE source=? AND track_id=?", (source, track_id))
 
     def stats(self) -> dict:
         """Totals for the home screen. Counts rows, not files on disk."""

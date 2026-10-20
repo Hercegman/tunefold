@@ -56,7 +56,8 @@ The decision is remembered and applied to every playlist after that.
   | Spelling | `Beyonce` → `Beyoncé`, `Panic at the Disco` → `Panic! At The Disco` | same name, different case, diacritics or punctuation |
   | Saved rule | applied automatically | a decision you made on an earlier playlist |
 - **Correct tags, everywhere.** Title, artist, album artist, album, year, track number and front cover, written as ID3v2.3 for MP3 so car head units and old players read them too. The credit the source printed is kept in a separate `ORIGINAL_ARTISTS` tag, so nothing is lost.
-- **Accurate matching.** The YouTube upload is chosen by title, artist and duration, not by the first hit. Live versions, remixes and sped-up edits are rejected.
+- **Accurate matching.** The YouTube upload is chosen by title, artist and duration, not by the first hit and not by view count. A title that says live, remix, cover or sped-up loses to a clean one - unless the track itself asks for it, so a playlist entry named `… - Live at Wembley` fetches the live take and not the studio cut. Hotel California is the test case: the 1977 live video outranks the studio recording on YouTube eight to one, and Tunefold still takes the studio album version the playlist actually names.
+- **…and the last word is yours.** Every upload the search found stays on the download screen under **Other versions**, with length, views, channel and a badge for what each one is. Pick another and that track is fetched again; search YouTube differently or paste a link if the right one never showed up. The choice is remembered per track, so the same song in a later playlist goes straight to it.
 - **Five formats.** MP3, M4A, Opus (128 to 320 kbps) and FLAC or WAV (lossless).
 - **Your layout.** One folder per playlist, `Artist/`, or `Artist/Album/`. File names as `Artist - Track`, `Track - Artist` or just `Track`, with optional `01.` prefixes.
 - **Resumable.** Tracks already on disk are skipped. Stop any time, retry only what failed.
@@ -77,6 +78,7 @@ The decision is remembered and applied to every playlist after that.
 | Account | None, for any source | Not needed | Required; 320 kbps needs Premium |
 | See the track list before downloading | Yes, and pick row by row | No | No |
 | Artist credit clean-up | Yes, and remembered for later playlists | No | No |
+| Choose which YouTube upload | Yes, per track, remembered | No | n/a |
 | Scriptable | No | Yes | Yes |
 
 Be honest about which one you want. **spotDL** is far more mature than this, has
@@ -111,7 +113,7 @@ flowchart LR
    - **Deezer** - the open `api.deezer.com` catalogue endpoints, paged 100 tracks at a time.
    - **Apple Music** - the `serialized-server-data` the web page is rendered from; a playlist longer than one page is finished through `amp-api`, the endpoint the web player itself uses, with the anonymous token out of its JS bundle.
 2. Artist credits are normalised and compared. Each suggestion lists the tracks it touches and why.
-3. For every selected track the best YouTube upload is picked, downloaded, converted, tagged and recorded in the local library so the next playlist knows what you already own.
+3. For every selected track the best YouTube upload is picked - closest to the source duration, with anything the title marks as a different recording pushed behind - then downloaded, converted, tagged and recorded in the local library so the next playlist knows what you already own. The runners-up stay on screen in case you wanted the live take after all.
 
 ## Quick start
 

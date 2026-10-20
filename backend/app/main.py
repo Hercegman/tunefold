@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .artists import TrackCredit, analyze, credit_key
-from .downloader import FORMATS, Cancelled, Downloader, ffmpeg_path
+from .downloader import FORMATS, Cancelled, Candidate, Downloader, ffmpeg_path
 from .library import Library
 from .models import SourceError, Track
 from .sources import LABELS, for_url
@@ -34,6 +34,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 lib = Library()
 
 ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+YT_URL_RE = re.compile(r"(?:youtube\.com/watch\?\S*?v=|youtube\.com/(?:embed|shorts|live)/|youtu\.be/)"
+                       r"([A-Za-z0-9_-]{11})")
+YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def youtube_id(text: str) -> str | None:
+    """A pasted link or a bare video id; anything else is a search query."""
+    text = (text or "").strip()
+    m = YT_URL_RE.search(text)
+    return m.group(1) if m else (text if YT_ID_RE.match(text) else None)
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 
 
@@ -53,6 +63,12 @@ class PreviewIn(BaseModel):
 class AliasIn(BaseModel):
     credit: str          # original credit, e.g. "Silk Sonic"
     to: str              # canonical name
+
+
+class VersionIn(BaseModel):
+    video_id: str
+    title: str | None = None
+    duration: float | None = None
 
 
 class JobIn(BaseModel):
@@ -77,6 +93,17 @@ class Job:
         self.cancel = threading.Event()
         self.started = time.time()
         self.folder: str | None = None
+        self.main_done = False
+        self.reruns = 0
+        self.lock = threading.Lock()
+
+    def finish(self) -> None:
+        """The job is only over once the main pass and every hand-picked
+        re-download have left."""
+        with self.lock:
+            if self.main_done and self.reruns == 0:
+                self.status = "cancelled" if self.cancel.is_set() else "finished"
+        self.emit("job", **self.snapshot())
 
     def emit(self, kind: str, **payload):
         ev = {"type": kind, "t": time.time(), **payload}
@@ -120,7 +147,21 @@ def _file_stem(job: Job, title: str, artist: str, position: int | None) -> str:
     return stem
 
 
-def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
+def _pick(ranked: list[Candidate], saved: dict | None) -> Candidate | None:
+    """The upload to download: whatever the user once chose for this track,
+    otherwise the best the rules found. A saved pick is honoured even when the
+    search no longer returns it, and even when the duration rules would not
+    have allowed it - it was chosen by hand on purpose."""
+    if saved:
+        for c in ranked:
+            if c.id == saved["video_id"]:
+                return c
+        return Candidate(id=saved["video_id"], url=f"https://www.youtube.com/watch?v={saved['video_id']}",
+                         title=saved.get("title") or "", duration=saved.get("duration"))
+    return next((c for c in ranked if c.eligible), None)
+
+
+def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate | None = None) -> None:
     tid = raw["id"]
     if job.cancel.is_set():
         job.set_track(tid, status="cancelled")
@@ -144,17 +185,26 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict) -> None:
         ext = FORMATS[dl.fmt]["ext"]
         stem = _file_stem(job, track.title, artist, track.position)
         dest = os.path.join(folder, f"{stem}.{ext}")
-        if os.path.exists(dest):
+        if os.path.exists(dest) and force is None:
             job.set_track(tid, status="skipped", file=dest, progress=100)
             lib.record(track_id=tid, source=source, playlist_id=pl.get("id"), title=track.title,
                        artist=artist, credit=track.credit, album=track.album, file=dest)
             return
-        job.set_track(tid, status="searching")
-        cand = dl.search(track.title, track.artists, (track.duration_ms or 0) / 1000 or None)
-        if not cand:
-            job.set_track(tid, status="failed", error="No reliable YouTube match (title/artist/duration disagree).")
-            return
-        job.set_track(tid, status="downloading", yt_title=cand.title, yt_url=cand.url)
+        if force is not None:
+            cand = force
+        else:
+            job.set_track(tid, status="searching")
+            ranked = dl.search_ranked(track.title, track.artists, (track.duration_ms or 0) / 1000 or None)
+            cand = _pick(ranked, lib.choice(source, tid))
+            # Everything the search turned up goes to the UI, including the
+            # uploads the duration rules refused: picking one of those by hand
+            # is exactly what the list is for.
+            job.set_track(tid, alternatives=[c.to_dict() for c in ranked[:8]])
+            if not cand:
+                job.set_track(tid, status="failed",
+                              error="No reliable YouTube match (title/artist/duration disagree).")
+                return
+        job.set_track(tid, status="downloading", chosen=cand.id, yt_title=cand.title, yt_url=cand.url)
         tmp_base = os.path.join(folder, f".{stem}.part-{tid[:6]}")
         final = dl.download(cand.url, tmp_base, progress=lambda p: job.set_track(tid, progress=round(p)),
                             on_convert=lambda: job.set_track(tid, status="converting", progress=99))
@@ -189,14 +239,27 @@ def _run_job(job: Job) -> None:
     for t in todo:
         job.set_track(t["id"], status="queued", title=t["title"], credit=", ".join(t["artists"]),
                       artist=job.data.artist_map.get(t["id"]) or ", ".join(t["artists"]))
-    dl = Downloader(fmt=job.settings.get("format", "mp3"), quality=str(job.settings.get("quality", "320")),
-                    cookies=job.settings.get("cookies") or None, loose=bool(job.settings.get("loose_match")),
-                    cancel=job.cancel)
+    dl = _downloader_for(job)
     workers = max(1, min(int(job.settings.get("parallel", 4)), 8, len(todo) or 1))
     with cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="dl") as pool:
         list(pool.map(lambda t: _run_track(job, dl, pl, t), todo))
-    job.status = "cancelled" if job.cancel.is_set() else "finished"
-    job.emit("job", **job.snapshot())
+    job.main_done = True
+    job.finish()
+
+
+def _downloader_for(job: Job) -> Downloader:
+    return Downloader(fmt=job.settings.get("format", "mp3"), quality=str(job.settings.get("quality", "320")),
+                      cookies=job.settings.get("cookies") or None, loose=bool(job.settings.get("loose_match")),
+                      cancel=job.cancel)
+
+
+def _rerun_one(job: Job, pl: dict, raw: dict, cand: Candidate) -> None:
+    try:
+        _run_track(job, _downloader_for(job), pl, raw, force=cand)
+    finally:
+        with job.lock:
+            job.reruns -= 1
+        job.finish()
 
 
 # ---------------------------------------------------------------- routes
@@ -281,6 +344,58 @@ def get_job(jid: str):
     if not job:
         raise HTTPException(404, "no such job")
     return job.snapshot()
+
+
+@app.get("/api/jobs/{jid}/tracks/{tid}/versions")
+def track_versions(jid: str, tid: str, q: str | None = None):
+    """A wider look than the download itself took: both standard queries plus
+    a live one, or whatever the user typed, with nothing filtered away."""
+    job = JOBS.get(jid)
+    if not job:
+        raise HTTPException(404, "no such job")
+    raw = next((t for t in job.data.playlist.get("tracks", []) if t["id"] == tid), None)
+    if not raw:
+        raise HTTPException(404, "no such track in this job")
+    dl = _downloader_for(job)
+    vid = youtube_id(q) if q else None
+    if vid:
+        cand = dl.probe(f"https://www.youtube.com/watch?v={vid}")
+        return {"candidates": [cand.to_dict()] if cand else []}
+    ranked = dl.search_wide(raw["title"], list(raw["artists"]),
+                            (raw.get("duration_ms") or 0) / 1000 or None, query=q)
+    return {"candidates": [c.to_dict() for c in ranked[:12]]}
+
+
+@app.post("/api/jobs/{jid}/tracks/{tid}/version")
+def choose_version(jid: str, tid: str, body: VersionIn):
+    """Download this track again from a different YouTube upload, and remember
+    the choice: the same track in a later playlist goes straight to it."""
+    job = JOBS.get(jid)
+    if not job:
+        raise HTTPException(404, "no such job")
+    pl = job.data.playlist
+    raw = next((t for t in pl.get("tracks", []) if t["id"] == tid), None)
+    if not raw:
+        raise HTTPException(404, "no such track in this job")
+    source = pl.get("source") or "spotify"
+    lib.save_choice(source, tid, body.video_id, body.title, body.duration)
+    if job.main_done:
+        job.cancel.clear()          # the main pass is over; this is a fresh ask
+    cand = Candidate(id=body.video_id, url=f"https://www.youtube.com/watch?v={body.video_id}",
+                     title=body.title or "", duration=body.duration)
+    with job.lock:
+        job.reruns += 1
+    job.status = "running"
+    job.set_track(tid, status="queued", progress=0, error=None, file=None, chosen=cand.id)
+    threading.Thread(target=_rerun_one, args=(job, pl, raw, cand), daemon=True,
+                     name=f"rerun-{jid}-{tid[:6]}").start()
+    return job.snapshot()
+
+
+@app.delete("/api/choices/{source}/{tid}")
+def forget_version(source: str, tid: str):
+    lib.forget_choice(source, tid)
+    return {"ok": True}
 
 
 @app.post("/api/jobs/{jid}/cancel")

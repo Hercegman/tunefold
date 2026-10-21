@@ -45,12 +45,14 @@
           "gstreamer1.0-plugins-bad",
           "gstreamer1.0-plugins-ugly",
           "gstreamer1.0-libav"
-        ]
+        ],
+        "desktopTemplate": "tunefold.desktop"
       },
       "rpm": {
         "depends": [
           "gstreamer1-plugins-good"
-        ]
+        ],
+        "desktopTemplate": "tunefold.desktop"
       }
     },
     "externalBin": [
@@ -76,6 +78,7 @@
         "role": "Viewer",
         "rank": "Alternate"
       }
-    ]
+    ],
+    "category": "Music"
   }
 }

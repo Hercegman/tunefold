@@ -79,6 +79,7 @@ export function SettingsDialog({ settings, onChange, onClose }: { settings: Sett
             </Field>
             <Switch checked={s.track_numbers} onChange={(v) => setS({ ...s, track_numbers: v })} label="Track number prefix (01., 02., …)" />
             <Switch checked={s.loose_match} onChange={(v) => setS({ ...s, loose_match: v })} label="Take the closest match when strict matching fails" />
+            <Switch checked={s.check_updates} onChange={(v) => setS({ ...s, check_updates: v })} label="Look for a new Tunefold when the app starts" />
             <Field label="Parallel downloads">
               <input type="number" min={1} max={8} className={inputCls} value={s.parallel} onChange={(e) => setS({ ...s, parallel: Math.max(1, Math.min(8, Number(e.target.value) || 1)) })} />
             </Field>

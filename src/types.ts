@@ -53,6 +53,7 @@ export interface Settings {
   parallel: number
   loose_match: boolean
   cookies: string
+  check_updates: boolean
 }
 
 /** One YouTube upload the search turned up for a track. */

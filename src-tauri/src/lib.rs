@@ -42,6 +42,26 @@ fn take_opened_files(opened: State<'_, Opened>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Whether this build can replace itself.
+///
+/// It cannot when it was installed by a package manager: a `.deb` or `.rpm`
+/// install is owned by apt or dnf, and an app that overwrote those files
+/// behind their back would be lying to them. An AppImage is a single file the
+/// user owns, so it can be swapped - the updater tells them apart by the
+/// `APPIMAGE` variable the AppImage runtime sets. Windows and macOS installs
+/// are always replaceable.
+#[tauri::command]
+fn can_self_update() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("APPIMAGE").is_some()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -68,6 +88,11 @@ pub fn run() {
         let _ = app.emit("tunefold://open-files", ());
     }));
 
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+
     let app = builder
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -79,7 +104,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Opened(Mutex::new(audio_args(std::env::args().skip(1)))))
-        .invoke_handler(tauri::generate_handler![take_opened_files])
+        .invoke_handler(tauri::generate_handler![take_opened_files, can_self_update])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

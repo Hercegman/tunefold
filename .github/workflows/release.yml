@@ -65,11 +65,22 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the updater artifacts. Without this the build still works,
+          # but it produces nothing the installed app will accept as an update.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # Empty when the key was generated without one, which is the case.
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Tunefold ${{ github.ref_name }}"
           releaseBody: |
             Desktop builds for Linux (.deb, .AppImage, .rpm), macOS (.dmg) and Windows (.msi, .exe).
             ffmpeg and ffprobe are bundled; nothing else to install.
+
+            Installed copies update themselves from here: the AppImage, the
+            Windows installers and the macOS app. A .deb or .rpm is updated by
+            apt or dnf instead.
           releaseDraft: true
           prerelease: false
+          # latest.json is what the installed app reads to find this release.
+          includeUpdaterJson: true

@@ -27,6 +27,9 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 
-# Opening a second file has to reach the window that is already running.
+# Desktop only: opening a second file has to reach the window that is already
+# running, and only a desktop build can replace itself with a new one.
 [target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
 tauri-plugin-single-instance = "2.5"
+tauri-plugin-updater = "2.14"
+tauri-plugin-process = "2.4"

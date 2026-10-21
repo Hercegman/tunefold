@@ -6,11 +6,13 @@ import { log } from './log'
 import { useNav } from './nav'
 import { watchOpenedFiles } from './openwith'
 import { usePlayer, usePlayerKeys } from './player'
+import { checkForUpdate, wasDismissed, type FoundUpdate } from './update'
 import { Collection } from './components/Collection'
 import { DownloadView } from './components/DownloadView'
 import { Home } from './components/Home'
 import { Preview, type StartPayload } from './components/Preview'
 import { SettingsDialog } from './components/SettingsDialog'
+import { UpdateBanner } from './components/UpdateBanner'
 import { Button, NowPlaying } from './components/ui'
 import type { Preview as PreviewT, Settings } from './types'
 
@@ -27,6 +29,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [lastPayload, setLastPayload] = useState<StartPayload | null>(null)
   const [job, setJob] = useState<{ id: string; playlistId: string } | null>(null)
+  const [update, setUpdate] = useState<FoundUpdate | null>(null)
   const player = usePlayer()
   usePlayerKeys(player)
   // The open-with handler must not be rebuilt every time the clock ticks, so
@@ -75,6 +78,18 @@ export default function App() {
     watchOpenedFiles((paths) => openRef.current(paths)).then((off) => { if (gone) off(); else stop = off })
     return () => { gone = true; stop?.() }
   }, [boot])
+
+  /** Is there a newer Tunefold? Asked once, after the app is up and out of
+   *  the way of starting: the answer is a strip at the top, never a dialog,
+   *  and a version the user has already waved off is not mentioned again. */
+  useEffect(() => {
+    if (boot !== 'ready' || !settings?.check_updates) return
+    let gone = false
+    checkForUpdate().then((found) => {
+      if (!gone && found && !wasDismissed(found.release.version)) setUpdate(found)
+    })
+    return () => { gone = true }
+  }, [boot, settings?.check_updates])
 
   // Escape goes back one view, unless a dialog or a text field wants it first.
   useEffect(() => {
@@ -150,6 +165,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
+      {update && <UpdateBanner found={update} onClose={() => setUpdate(null)} />}
       {view.name === 'home' && (
         <>
           <div className="flex justify-end gap-1 px-4 pt-3">

@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white&labelColor=0e0f12)](https://python.org)
 [![yt-dlp](https://img.shields.io/badge/audio-yt--dlp%20%2B%20ffmpeg-ff5d5d?style=flat-square&labelColor=0e0f12)](https://github.com/yt-dlp/yt-dlp)
 
-[Why](#why-tunefold) · [Features](#features) · [Player](#the-turntable) · [Open with](#opening-files-from-the-desktop) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
+[Why](#why-tunefold) · [Features](#features) · [Player](#the-turntable) · [Open with](#opening-files-from-the-desktop) · [Updates](#updates) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
 
 </div>
 
@@ -64,6 +64,7 @@ The decision is remembered and applied to every playlist after that.
 - **It retries by itself.** YouTube hands out signed URLs that go stale, and a 403 mid-playlist is routine. Each download re-extracts a fresh URL before giving up, and anything still refused waits for a second pass once the rest are done and nothing is competing for bandwidth. The row says so - "Retrying at the end" - instead of showing you an HTTP code. Errors that will never pass, like a private video, fail straight away.
 - **Parallel downloads** with live per-track progress.
 - **A turntable, not a track list.** What you downloaded plays in the app, filed under the folded artist name - see [the turntable](#the-turntable). A real transport with it: a progress bar you can drag, shuffle, repeat the queue or the track, volume, and keyboard shortcuts from any screen.
+- **It updates itself.** On start-up Tunefold asks GitHub whether there is a newer release and, if there is, says so in a strip at the top with the release notes. One button downloads it, installs it and restarts - nothing happens without that press, and a version you wave off is not mentioned again. Every update is signed, and a build will not install one it cannot verify. See [updates](#updates).
 - **A player for the whole machine.** Tunefold registers itself as an audio handler, so any MP3, M4A, FLAC, Opus, WAV, OGG or AAC file on the computer can be opened in it - and opening one track queues the rest of its folder behind it. A second file opened while Tunefold is running goes to the window that is already playing instead of starting a second copy. See [opening files from the desktop](#opening-files-from-the-desktop).
 - **Back goes back.** The arrow and Escape step one screen back, and so do the webview's own back gestures, which an app without a history stack silently swallows. Leaving a running download no longer cancels it or reloads the playlist - the Download button on the preview leads straight back in.
 
@@ -152,6 +153,34 @@ the new process hands the paths to the window that is already playing, focuses
 it, and exits. The paths wait on the Rust side until the window asks for them,
 so a file opened on a cold start - while the backend is still coming up - is not
 lost either.
+
+## Updates
+
+The app checks for a new release when it starts (switch it off under
+Settings → *Look for a new Tunefold when the app starts*) and shows what it
+found rather than interrupting:
+
+- **AppImage, Windows and macOS** builds replace themselves. The strip offers
+  **Install and restart**, downloads the new build with a progress bar, swaps
+  it in and restarts.
+- **`.deb` and `.rpm`** are owned by apt and dnf, so Tunefold will not
+  overwrite them behind their back. The strip links to the Releases page
+  instead. The app knows which case it is in from the `APPIMAGE` variable.
+
+Trust comes from signatures, not from the hostname: every updater artifact is
+signed with a key that only the release workflow has, the public half is
+compiled into the app (`plugins.updater.pubkey`), and an artifact that does not
+verify is refused. The private key lives in the `TAURI_SIGNING_PRIVATE_KEY`
+repository secret - and nowhere else, so **a backup of it outside GitHub is
+the difference between being able to ship an update and not**. Losing it means
+every installed copy stops accepting updates until users install a new build
+by hand.
+
+The release workflow writes a `latest.json` next to the other assets
+(`includeUpdaterJson`), and the app reads it from
+`releases/latest/download/latest.json`. That URL resolves to the newest
+**published** release, so a draft is invisible to installed copies until it is
+published - which is what makes publishing the moment an update goes out.
 
 ## Compared to other downloaders
 
@@ -245,14 +274,29 @@ git tag v0.3.0 && git push && git push --tags
 ```
 
 When the `Release` workflow finishes, open the draft on the Releases page,
-check the assets and publish it.
+check the assets and publish it. Publishing is what sends the update out:
+until then the draft is invisible to installed copies.
+
+Worth checking on the draft before publishing, because a green workflow does
+not prove the package works:
+
+```bash
+# the Linux desktop entry really does take the file it was asked to open
+gh release download vX.Y.Z --pattern "*.deb"
+bsdtar xf Tunefold_*_amd64.deb && bsdtar xf data.tar.gz
+grep -E "^Exec=|^MimeType=" usr/share/applications/Tunefold.desktop
+# Exec=tunefold %F   <- the %F is the whole point
+
+# and that the updater has something to read
+gh release view vX.Y.Z --json assets --jq '.assets[].name' | grep latest.json
+```
 
 ## Architecture
 
 | Layer | Stack | What it does |
 | :--- | :--- | :--- |
 | `src/` | React 19, TypeScript, Tailwind 4, lucide | Preview table, folding panel, download view, settings |
-| `src-tauri/` | Tauri 2, plugins: shell, dialog, opener, log, single-instance | Native window, file dialogs, sidecar lifecycle, files opened from the desktop |
+| `src-tauri/` | Tauri 2, plugins: shell, dialog, opener, log, single-instance, updater, process | Native window, file dialogs, sidecar lifecycle, files opened from the desktop, self-update |
 | `backend/app/sources.py` | - | Which catalogue a pasted link belongs to |
 | `backend/app/spotify.py` | requests | Embed page parsing, spclient paging, album lookup |
 | `backend/app/deezer.py` | requests | api.deezer.com playlists, albums, tracks and paging |
@@ -265,6 +309,7 @@ check the assets and publish it.
 | `src/player.ts` | React | One audio element for the app: queue, shuffle, repeat, volume, keyboard |
 | `src/components/Turntable.tsx`, `Transport.tsx` | React, SVG | The deck itself, and the progress bar and buttons under it |
 | `src/openwith.ts`, `scripts/install_desktop.py` | Tauri events | Files handed over by the desktop, and the Linux desktop entry |
+| `src/update.ts`, `src/components/UpdateBanner.tsx` | Tauri updater | Checking for a new release, and installing it on one press |
 | `backend/app/main.py` | FastAPI, SSE | HTTP API and live progress stream |
 
 The UI talks to the backend over HTTP on `127.0.0.1:8765`. Progress arrives as

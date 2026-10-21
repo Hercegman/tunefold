@@ -18,6 +18,7 @@ DEFAULT_SETTINGS = {
     "parallel": 4,
     "loose_match": False,
     "cookies": "",
+    "check_updates": True,          # look for a new release when the app starts
 }
 
 

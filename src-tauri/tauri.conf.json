@@ -79,6 +79,18 @@
         "rank": "Alternate"
       }
     ],
-    "category": "Music"
+    "category": "Music",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzRDAyNkZBRUQ4RTUxQjYKUldTMlVZN3QraWJRMDhsemFrM0VyU0NZVWVkZ3pvUmIyYmlNRjVGSEdTdVFKdHFXMEFhMDVyc3cK",
+      "endpoints": [
+        "https://github.com/Hercegman/tunefold/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

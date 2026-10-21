@@ -117,16 +117,26 @@ export interface Stats {
   last: number | null
 }
 
-/** One file in the local collection, filed under the folded artist name. */
+/** One file the player can play: a download filed under the folded artist
+ *  name, or - with source 'local' - a file opened from the desktop. */
 export interface CollectionTrack {
   track_id: string
-  source: SourceName
+  source: SourceName | 'local'
   title: string
   artist: string
   credit: string
   album: string | null
   file: string
   created: number
+  /** Seconds, read from the file's own header; only set for opened files. */
+  duration?: number | null
+}
+
+/** What the backend makes of a set of files handed over by the desktop. */
+export interface OpenedFiles {
+  tracks: CollectionTrack[]
+  /** Where in `tracks` the file the user actually clicked sits. */
+  start: number
 }
 
 export interface Alias { credit_key: string; credit: string; canonical: string; created: number }

@@ -1,4 +1,4 @@
-import type { Alias, CollectionTrack, JobSnapshot, Preview, Recent, Settings, Stats, YtCandidate } from './types'
+import type { Alias, CollectionTrack, JobSnapshot, OpenedFiles, Preview, Recent, Settings, Stats, YtCandidate } from './types'
 
 export const PORT = 8765
 export const BASE = `http://127.0.0.1:${PORT}`
@@ -27,6 +27,10 @@ export const api = {
   saveSettings: (patch: Partial<Settings>) => req<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   recent: () => req<Recent[]>('/api/recent'),
   collection: () => req<CollectionTrack[]>('/api/collection'),
+  /** Hand the backend files opened from the desktop; it describes them and
+   *  allows itself to stream them back. */
+  external: (paths: string[]) =>
+    req<OpenedFiles>('/api/external', { method: 'POST', body: JSON.stringify({ paths }) }),
   covers: (source: string, ids: string[]) =>
     req<Record<string, string>>('/api/covers', { method: 'POST', body: JSON.stringify({ source, ids }) }),
   stats: () => req<Stats>('/api/stats'),

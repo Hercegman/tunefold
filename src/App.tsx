@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Disc3, Loader2, Settings as SettingsIcon } from 'lucide-react'
 import { api } from './api'
 import { ensureBackend } from './backend'
 import { log } from './log'
 import { useNav } from './nav'
-import { usePlayer } from './player'
+import { watchOpenedFiles } from './openwith'
+import { usePlayer, usePlayerKeys } from './player'
 import { Collection } from './components/Collection'
 import { DownloadView } from './components/DownloadView'
 import { Home } from './components/Home'
@@ -27,6 +28,11 @@ export default function App() {
   const [lastPayload, setLastPayload] = useState<StartPayload | null>(null)
   const [job, setJob] = useState<{ id: string; playlistId: string } | null>(null)
   const player = usePlayer()
+  usePlayerKeys(player)
+  // The open-with handler must not be rebuilt every time the clock ticks, so
+  // it reads the current view through a ref rather than closing over it.
+  const viewRef = useRef(view)
+  useEffect(() => { viewRef.current = view }, [view])
 
   useEffect(() => {
     (async () => {
@@ -40,6 +46,35 @@ export default function App() {
       }
     })()
   }, [])
+
+  /** Files the desktop handed over: an MP3 opened with Tunefold, or a path on
+   *  the command line. The backend queues the rest of the folder behind a
+   *  single file, so opening one track plays the album it sits in. */
+  const openFiles = useCallback(async (paths: string[]) => {
+    try {
+      const { tracks, start } = await api.external(paths)
+      if (!tracks.length) return
+      player.play(tracks, start)
+      if (viewRef.current.name !== 'collection') go({ name: 'collection' })
+    } catch (e) {
+      log('error', `open: ${e instanceof Error ? e.message : String(e)}`)
+      setError(`Could not open that file: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }, [player, go])
+
+  // Only once the backend is up, because it is the backend that reads the
+  // files - and nothing is lost by waiting, since the shell holds the paths
+  // until they are asked for. The listener is registered once, through a ref,
+  // so the clock ticking does not tear it down and build it again.
+  const openRef = useRef(openFiles)
+  useEffect(() => { openRef.current = openFiles }, [openFiles])
+  useEffect(() => {
+    if (boot !== 'ready') return
+    let stop: (() => void) | undefined
+    let gone = false
+    watchOpenedFiles((paths) => openRef.current(paths)).then((off) => { if (gone) off(); else stop = off })
+    return () => { gone = true; stop?.() }
+  }, [boot])
 
   // Escape goes back one view, unless a dialog or a text field wants it first.
   useEffect(() => {
@@ -141,9 +176,8 @@ export default function App() {
       {error && view.name !== 'home' && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg border border-danger/40 bg-panel px-4 py-2 text-sm text-danger shadow-xl" onClick={() => setError(null)}>{error}</div>
       )}
-      {player.current && view.name !== 'collection' && (
-        <NowPlaying title={player.current.title} subtitle={player.current.artist}
-          playing={player.playing} onToggle={player.toggle} onOpen={() => go({ name: 'collection' })} />
+      {view.name !== 'collection' && (
+        <NowPlaying player={player} onOpen={() => go({ name: 'collection' })} />
       )}
       {showSettings && <SettingsDialog settings={settings} onChange={setSettings} onClose={() => setShowSettings(false)} />}
     </div>

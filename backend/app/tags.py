@@ -7,7 +7,9 @@ Music actually said.
 from __future__ import annotations
 
 import logging
+import os
 
+import mutagen
 import requests
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC, Picture
@@ -53,6 +55,53 @@ def read_cover(path: str) -> tuple[bytes, str] | None:
     except Exception as exc:  # noqa: BLE001
         log.debug("cover in %s: %s", path, exc)
     return None
+
+
+def read_meta(path: str) -> dict:
+    """Title, artist and album as the file itself carries them.
+
+    For a file Tunefold downloaded the library already knows all of this; this
+    is for the ones the user opened from the desktop, where the tags - and
+    failing those, the file name - are the only description there is.
+    """
+    stem = os.path.splitext(os.path.basename(path))[0]
+    meta = {"title": stem, "artist": _artist_from_name(stem), "album": None, "duration": None}
+    try:
+        f = mutagen.File(path, easy=True)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("tags in %s: %s", path, exc)
+        return meta
+    if f is None:
+        return meta
+    tags = f.tags or {}
+
+    def first(*keys) -> str | None:
+        for k in keys:
+            v = tags.get(k)
+            if isinstance(v, list):
+                v = v[0] if v else None
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        return None
+
+    meta["title"] = first("title") or stem
+    meta["artist"] = first("artist", "albumartist", "performer") or meta["artist"]
+    meta["album"] = first("album")
+    length = getattr(getattr(f, "info", None), "length", None)
+    if isinstance(length, (int, float)) and length > 0:
+        meta["duration"] = round(float(length), 3)
+    return meta
+
+
+def _artist_from_name(stem: str) -> str:
+    """"Artist - Title" is how most loose files are named, including the ones
+    Tunefold writes, so the dash is worth a guess before giving up."""
+    for sep in (" - ", " – ", " — "):
+        if sep in stem:
+            left = stem.split(sep, 1)[0].strip()
+            if left:
+                return left
+    return "Unknown artist"
 
 
 def _mime(data: bytes) -> str:

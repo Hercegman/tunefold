@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white&labelColor=0e0f12)](https://python.org)
 [![yt-dlp](https://img.shields.io/badge/audio-yt--dlp%20%2B%20ffmpeg-ff5d5d?style=flat-square&labelColor=0e0f12)](https://github.com/yt-dlp/yt-dlp)
 
-[Why](#why-tunefold) · [Features](#features) · [Player](#the-turntable) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
+[Why](#why-tunefold) · [Features](#features) · [Player](#the-turntable) · [Open with](#opening-files-from-the-desktop) · [Compared](#compared-to-other-downloaders) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Build](#build) · [Architecture](#architecture) · [Roadmap](#roadmap)
 
 </div>
 
@@ -63,7 +63,8 @@ The decision is remembered and applied to every playlist after that.
 - **Resumable.** Tracks already on disk are skipped. Stop any time, retry only what failed.
 - **It retries by itself.** YouTube hands out signed URLs that go stale, and a 403 mid-playlist is routine. Each download re-extracts a fresh URL before giving up, and anything still refused waits for a second pass once the rest are done and nothing is competing for bandwidth. The row says so - "Retrying at the end" - instead of showing you an HTTP code. Errors that will never pass, like a private video, fail straight away.
 - **Parallel downloads** with live per-track progress.
-- **A turntable, not a track list.** What you downloaded plays in the app, filed under the folded artist name - see [the turntable](#the-turntable).
+- **A turntable, not a track list.** What you downloaded plays in the app, filed under the folded artist name - see [the turntable](#the-turntable). A real transport with it: a progress bar you can drag, shuffle, repeat the queue or the track, volume, and keyboard shortcuts from any screen.
+- **A player for the whole machine.** Tunefold registers itself as an audio handler, so any MP3, M4A, FLAC, Opus, WAV, OGG or AAC file on the computer can be opened in it - and opening one track queues the rest of its folder behind it. A second file opened while Tunefold is running goes to the window that is already playing instead of starting a second copy. See [opening files from the desktop](#opening-files-from-the-desktop).
 - **Back goes back.** The arrow and Escape step one screen back, and so do the webview's own back gestures, which an app without a history stack silently swallows. Leaving a running download no longer cancels it or reloads the playlist - the Download button on the preview leads straight back in.
 
 <div align="center">
@@ -92,8 +93,33 @@ starts immediately and the choreography plays over it.
 The label in the middle is the cover art read out of the file's own tags, so it
 works offline and for everything downloaded before there was a player.
 
-Playing something and then leaving the screen keeps it playing, with a strip at
-the bottom to pause it or go back. Space plays and pauses, the arrows seek, and
+Everything else on the deck is there too, and some of it works: the start/stop
+button and the cue lever both play and pause, 33 and 45 change how fast the
+platter turns, and the stylus lifts off the record whenever playback stops. The
+counterweight, the anti-skate dial, the pitch fader, the target light and the
+45 adapter on its post are furniture - a deck looks like a deck. A record with
+no cover art gets its name printed round the label instead.
+
+Under the deck is the transport the arm cannot do on its own: a progress bar to
+drag, **shuffle**, **repeat** (the queue, or one track), volume, and how far
+through the queue you are. Shuffling re-orders what has not played yet and
+leaves the record that is playing on the deck. Shuffle, repeat and volume are
+remembered between sessions.
+
+Playing something and then leaving the screen keeps it playing, with a strip
+along the bottom that has the same controls and the same progress bar. The
+shortcuts work on every screen:
+
+| Key | |
+| :--- | :--- |
+| `Space` | play / pause |
+| `←` `→` | seek 5 seconds |
+| `↑` `↓` | volume |
+| `N` / `P` | next / previous |
+| `S` | shuffle |
+| `R` | repeat: off → queue → one track |
+| `M` | mute |
+
 `prefers-reduced-motion` turns the animation off.
 
 > **Linux:** the window decodes audio through GStreamer rather than carrying its
@@ -103,6 +129,29 @@ the bottom to pause it or go back. Space plays and pauses, the arrows seek, and
 > `gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav`
 > (`gstreamer1.0-*` on Debian and Ubuntu). The player says so when it hits this
 > rather than sitting there silently.
+
+## Opening files from the desktop
+
+Tunefold claims the audio types it can play, so it appears under **Open with**
+for any audio file on the machine - not only for what it downloaded itself.
+Open one track and the rest of the folder queues behind it in name order; select
+several and you get exactly those. Titles come from the file's own tags, and
+from the file name when there are none.
+
+The `.deb`, `.rpm`, `.msi` and `.dmg` register the file types when they install.
+For an AppImage, or a local build, there is nothing installed to register, so:
+
+```bash
+python scripts/install_desktop.py path/to/Tunefold.AppImage
+python scripts/install_desktop.py --default      # and make it the handler
+python scripts/install_desktop.py --uninstall
+```
+
+Opening a file while Tunefold is already running does not start a second copy:
+the new process hands the paths to the window that is already playing, focuses
+it, and exits. The paths wait on the Rust side until the window asks for them,
+so a file opened on a cold start - while the backend is still coming up - is not
+lost either.
 
 ## Compared to other downloaders
 
@@ -203,7 +252,7 @@ check the assets and publish it.
 | Layer | Stack | What it does |
 | :--- | :--- | :--- |
 | `src/` | React 19, TypeScript, Tailwind 4, lucide | Preview table, folding panel, download view, settings |
-| `src-tauri/` | Tauri 2, plugins: shell, dialog, opener, log | Native window, file dialogs, sidecar lifecycle |
+| `src-tauri/` | Tauri 2, plugins: shell, dialog, opener, log, single-instance | Native window, file dialogs, sidecar lifecycle, files opened from the desktop |
 | `backend/app/sources.py` | - | Which catalogue a pasted link belongs to |
 | `backend/app/spotify.py` | requests | Embed page parsing, spclient paging, album lookup |
 | `backend/app/deezer.py` | requests | api.deezer.com playlists, albums, tracks and paging |
@@ -213,7 +262,9 @@ check the assets and publish it.
 | `backend/app/downloader.py` | yt-dlp, ffmpeg | Search, candidate scoring, download, conversion |
 | `backend/app/tags.py` | mutagen | ID3v2.3, MP4, FLAC and Opus tags with cover art |
 | `backend/app/library.py` | SQLite | Settings, saved artist rules, download history, chosen uploads |
-| `src/player.ts`, `src/components/Turntable.tsx` | React, SVG | One audio element for the app, the platter and the arm |
+| `src/player.ts` | React | One audio element for the app: queue, shuffle, repeat, volume, keyboard |
+| `src/components/Turntable.tsx`, `Transport.tsx` | React, SVG | The deck itself, and the progress bar and buttons under it |
+| `src/openwith.ts`, `scripts/install_desktop.py` | Tauri events | Files handed over by the desktop, and the Linux desktop entry |
 | `backend/app/main.py` | FastAPI, SSE | HTTP API and live progress stream |
 
 The UI talks to the backend over HTTP on `127.0.0.1:8765`. Progress arrives as
@@ -221,8 +272,11 @@ server-sent events, one per state change, so the window never polls.
 
 Audio is streamed by the backend with range requests rather than handed to the
 webview as a file, which keeps seeking working and means the player needs no
-filesystem permissions at all. Both `/api/audio` and `/api/cover` serve only
-paths that appear in the download history; everything else is a 404.
+filesystem permissions at all. `/api/audio` and `/api/cover` serve two kinds of
+path and nothing else: one that appears in the download history, and one the
+user opened by hand this session - `/api/external` only accepts an existing
+audio file, and registering it is what makes it playable. Everything else is a
+404.
 
 ## Roadmap
 

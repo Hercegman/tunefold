@@ -26,7 +26,7 @@ from .library import Library
 from .models import SourceError, Track
 from .sources import LABELS, for_url
 from .sources import get as source_for
-from .tags import fetch_cover, read_cover, write_tags
+from .tags import fetch_cover, read_cover, read_meta, write_tags
 
 log = logging.getLogger("backend")
 app = FastAPI(title="Tunefold backend")
@@ -74,6 +74,12 @@ class VersionIn(BaseModel):
     video_id: str
     title: str | None = None
     duration: float | None = None
+
+
+class ExternalIn(BaseModel):
+    """Files the desktop handed Tunefold through "Open with"."""
+    paths: list[str]
+    folder: bool = True       # one file opened -> queue the folder it sits in
 
 
 class JobIn(BaseModel):
@@ -333,7 +339,8 @@ def library():
 
 # ------------------------------------------------- the local collection
 AUDIO_TYPES = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "opus": "audio/ogg",
-               "flac": "audio/flac", "wav": "audio/wav"}
+               "flac": "audio/flac", "wav": "audio/wav", "ogg": "audio/ogg",
+               "oga": "audio/ogg", "aac": "audio/aac", "m4b": "audio/mp4"}
 RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)")
 CHUNK = 256 * 1024
 
@@ -343,12 +350,77 @@ def collection():
     return lib.collection()
 
 
+# Files the user opened from the desktop this session. They are not in the
+# download history, so without this they would be 404s - and it stays an
+# allowlist: a path only lands here because the user picked that exact file.
+OPENED: set[str] = set()
+OPENED_LOCK = threading.Lock()
+OPENED_MAX = 5000
+
+
 def _owned(path: str) -> str:
-    """A path Tunefold downloaded and still has. Everything else is a 404:
-    the download history is the whole whitelist these two routes serve."""
-    if not lib.has_file(path) or not os.path.exists(path):
+    """A path the user either downloaded or opened by hand, and that is still
+    on disk. Everything else is a 404 - these two routes serve no other file."""
+    with OPENED_LOCK:
+        opened = path in OPENED
+    if not (opened or lib.has_file(path)) or not os.path.exists(path):
         raise HTTPException(404, "not in your collection")
     return path
+
+
+def _audio_path(raw: str) -> str | None:
+    """An existing audio file, named the way the rest of the app will name it."""
+    try:
+        p = Path(raw).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if not p.is_file() or p.suffix.lstrip(".").lower() not in AUDIO_TYPES:
+        return None
+    return str(p)
+
+
+def _as_track(path: str) -> dict:
+    """One opened file in the shape the collection uses, so the player and the
+    turntable need to know nothing about where a track came from."""
+    meta = read_meta(path)
+    try:
+        created = os.path.getmtime(path)
+    except OSError:
+        created = time.time()
+    return {"track_id": f"local:{path}", "source": "local", "title": meta["title"],
+            "artist": meta["artist"], "credit": meta["artist"], "album": meta["album"],
+            "file": path, "created": created, "duration": meta["duration"]}
+
+
+@app.post("/api/external")
+def external(body: ExternalIn):
+    """Register files opened from outside the app and describe them.
+
+    Opening a single track queues the rest of its folder behind it, in name
+    order, the way any desktop player does; opening a selection queues exactly
+    that selection.
+    """
+    opened = [p for p in (_audio_path(raw) for raw in body.paths[:500]) if p]
+    if not opened:
+        raise HTTPException(400, "nothing there Tunefold can play")
+
+    queue = opened
+    if body.folder and len(opened) == 1:
+        folder = Path(opened[0]).parent
+        try:
+            siblings = sorted((str(f) for f in folder.iterdir()
+                               if f.is_file() and f.suffix.lstrip(".").lower() in AUDIO_TYPES),
+                              key=lambda f: os.path.basename(f).lower())
+        except OSError:
+            siblings = []
+        if opened[0] in siblings and len(siblings) <= 500:
+            queue = siblings
+
+    with OPENED_LOCK:
+        if len(OPENED) + len(queue) > OPENED_MAX:
+            OPENED.clear()
+        OPENED.update(queue)
+    return {"tracks": [_as_track(p) for p in queue], "start": queue.index(opened[0])}
 
 
 @app.get("/api/audio")

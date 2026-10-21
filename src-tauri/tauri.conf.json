@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Tunefold",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "identifier": "io.github.hercegman.tunefold",
   "build": {
     "frontendDist": "../dist",
@@ -57,6 +57,25 @@
       "binaries/backend",
       "binaries/ffmpeg",
       "binaries/ffprobe"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp3",
+          "m4a",
+          "flac",
+          "opus",
+          "wav",
+          "ogg",
+          "oga",
+          "aac"
+        ],
+        "name": "Audio file",
+        "description": "Audio file",
+        "mimeType": "audio/mpeg;audio/mp4;audio/x-m4a;audio/flac;audio/x-flac;audio/ogg;audio/opus;audio/wav;audio/x-wav;audio/aac",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
     ]
   }
 }

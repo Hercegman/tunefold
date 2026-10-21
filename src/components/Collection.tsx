@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ChevronDown, ChevronRight, Disc3, Loader2, Pause, Play, SkipBack, SkipForward } from 'lucide-react'
-import { api, coverUrl, fmtSeconds } from '../api'
+import { AlertTriangle, ChevronDown, ChevronRight, Disc3, FolderOpen, Loader2, Play } from 'lucide-react'
+import { api, baseName, coverUrl } from '../api'
 import type { PlayerState } from '../player'
 import type { CollectionTrack } from '../types'
 import { BackButton, Button } from './ui'
+import { Transport } from './Transport'
 import { Turntable } from './Turntable'
 
 /** The sidebar is the point of the whole app: one entry per artist, under the
@@ -18,6 +19,29 @@ function group(tracks: CollectionTrack[]): { artist: string; tracks: CollectionT
   return [...by.entries()]
     .map(([artist, list]) => ({ artist, tracks: list }))
     .sort((a, b) => a.artist.localeCompare(b.artist))
+}
+
+/** The folder an opened queue came from, for the heading above it. */
+function folderOf(tracks: CollectionTrack[]): string {
+  const dir = tracks[0]?.file.replace(/[\\/][^\\/]*$/, '')
+  return dir ? baseName(dir) : 'Opened files'
+}
+
+function TrackRow({ track, playing, current, onPlay, indent = 'pl-8' }: {
+  track: CollectionTrack
+  playing: boolean
+  current: boolean
+  onPlay: () => void
+  indent?: string
+}) {
+  return (
+    <button onClick={onPlay} title={track.title}
+      className={`flex w-full items-center gap-2 py-1.5 ${indent} pr-3 text-left text-xs transition
+        ${current ? 'bg-accent/10 text-accent' : 'text-muted hover:bg-panel-2 hover:text-fg'}`}>
+      {current && playing ? <Disc3 size={12} className="shrink-0 spin" /> : <Play size={10} className="shrink-0 opacity-50" />}
+      <span className="truncate">{track.title}</span>
+    </button>
+  )
 }
 
 export function Collection({ player, onBack }: { player: PlayerState; onBack: () => void }) {
@@ -35,6 +59,13 @@ export function Collection({ player, onBack }: { player: PlayerState; onBack: ()
   const currentFile = current?.file
   const currentArtist = current?.artist
 
+  /** A queue of files opened from the desktop is not in the library, so it
+   *  gets a section of its own rather than going unlisted. */
+  const opened = useMemo(() => {
+    const known = new Set((tracks || []).map((t) => t.file))
+    return player.queue.some((t) => !known.has(t.file)) ? player.queue : []
+  }, [tracks, player.queue])
+
   // The record change is choreography, not a gate: the next track is already
   // playing underneath it.
   useEffect(() => {
@@ -48,18 +79,6 @@ export function Collection({ player, onBack }: { player: PlayerState; onBack: ()
     if (currentArtist) setOpen(currentArtist)
   }, [currentArtist])
 
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      const el = document.activeElement as HTMLElement | null
-      if (el && (el.tagName === 'INPUT' || el.isContentEditable)) return
-      if (e.key === ' ') { e.preventDefault(); player.toggle() }
-      else if (e.key === 'ArrowRight') player.seek(player.time + 5)
-      else if (e.key === 'ArrowLeft') player.seek(player.time - 5)
-    }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [player])
-
   const playAll = () => tracks?.length && player.play(tracks, 0)
 
   return (
@@ -71,6 +90,19 @@ export function Collection({ player, onBack }: { player: PlayerState; onBack: ()
           {tracks && <span className="ml-auto text-xs text-muted">{tracks.length}</span>}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          {opened.length > 0 && (
+            <div className="mb-1 border-b border-line pb-1">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 text-sm">
+                <FolderOpen size={13} className="shrink-0 text-muted" />
+                <span className="truncate" title={folderOf(opened)}>{folderOf(opened)}</span>
+                <span className="ml-auto shrink-0 text-xs tabular-nums text-muted">{opened.length}</span>
+              </div>
+              {opened.map((t, i) => (
+                <TrackRow key={t.file} track={t} current={currentFile === t.file} playing={player.playing}
+                  onPlay={() => player.play(opened, i)} />
+              ))}
+            </div>
+          )}
           {!tracks && !error && <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted"><Loader2 size={13} className="spin" /> Reading your library…</div>}
           {error && <div className="px-3 py-4 text-xs text-danger">{error}</div>}
           {tracks?.length === 0 && <div className="px-3 py-4 text-xs text-muted">Nothing downloaded yet. Paste a link and the files land here.</div>}
@@ -84,17 +116,10 @@ export function Collection({ player, onBack }: { player: PlayerState; onBack: ()
                   <span className="truncate">{artist}</span>
                   <span className="ml-auto shrink-0 text-xs tabular-nums text-muted">{list.length}</span>
                 </button>
-                {expanded && list.map((t) => {
-                  const on = current?.file === t.file
-                  return (
-                    <button key={t.file} onClick={() => player.play(list, list.indexOf(t))}
-                      className={`flex w-full items-center gap-2 py-1.5 pl-8 pr-3 text-left text-xs transition
-                        ${on ? 'bg-accent/10 text-accent' : 'text-muted hover:bg-panel-2 hover:text-fg'}`}>
-                      {on && player.playing ? <Disc3 size={12} className="shrink-0 spin" /> : <Play size={10} className="shrink-0 opacity-50" />}
-                      <span className="truncate">{t.title}</span>
-                    </button>
-                  )
-                })}
+                {expanded && list.map((t) => (
+                  <TrackRow key={t.file} track={t} current={currentFile === t.file} playing={player.playing}
+                    onPlay={() => player.play(list, list.indexOf(t))} />
+                ))}
               </div>
             )
           })}
@@ -110,26 +135,20 @@ export function Collection({ player, onBack }: { player: PlayerState; onBack: ()
         <div className="min-h-0 w-full max-w-2xl flex-1">
           <Turntable cover={current ? coverUrl(current.file) : null} progress={player.progress}
             playing={player.playing} swapping={swapping} trackKey={current?.file || ''}
-            onSeek={(p) => player.seek(p * player.duration)} />
+            title={current?.title} artist={current?.artist}
+            onSeek={(p) => player.seek(p * player.duration)}
+            onToggle={player.toggle} />
         </div>
 
-        <div className="w-full max-w-md text-center">
-          <div className="truncate text-lg font-semibold tracking-tight">{current?.title || 'Nothing playing'}</div>
-          <div className="truncate text-sm text-muted">
-            {current ? `${current.artist}${current.album ? ` · ${current.album}` : ''}` : 'Pick something from the left'}
+        <div className="w-full max-w-md">
+          <div className="text-center">
+            <div className="truncate text-lg font-semibold tracking-tight">{current?.title || 'Nothing playing'}</div>
+            <div className="truncate text-sm text-muted">
+              {current ? `${current.artist}${current.album ? ` · ${current.album}` : ''}` : 'Pick something from the left'}
+            </div>
           </div>
-          <div className="mt-3 flex items-center justify-center gap-5">
-            <button onClick={player.prev} disabled={!current}
-              className="text-muted transition hover:text-fg disabled:opacity-30"><SkipBack size={20} /></button>
-            <button onClick={player.toggle} disabled={!current}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-fg transition hover:brightness-110 disabled:opacity-30">
-              {player.playing ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
-            </button>
-            <button onClick={player.next} disabled={player.index + 1 >= player.queue.length}
-              className="text-muted transition hover:text-fg disabled:opacity-30"><SkipForward size={20} /></button>
-          </div>
-          <div className="mt-2 flex items-center justify-center gap-2 text-xs tabular-nums text-muted">
-            <span>{fmtSeconds(player.time)}</span><span>/</span><span>{fmtSeconds(player.duration)}</span>
+          <div className="mt-3">
+            <Transport player={player} />
           </div>
           {player.error && (
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-left text-xs text-danger">

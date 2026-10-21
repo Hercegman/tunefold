@@ -1,5 +1,8 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { ArrowLeft, Disc3, Loader2, Pause, Play } from 'lucide-react'
+import { ArrowLeft, Disc3, Loader2, Pause, Play, SkipBack, SkipForward } from 'lucide-react'
+import { fmtSeconds } from '../api'
+import type { PlayerState } from '../player'
+import { SeekBar } from './Transport'
 
 type Variant = 'primary' | 'ghost' | 'danger' | 'outline'
 
@@ -71,20 +74,37 @@ export function BackButton({ onClick, className = '' }: { onClick: () => void; c
   )
 }
 
-export function NowPlaying({ title, subtitle, playing, onToggle, onOpen }: {
-  title: string; subtitle: string; playing: boolean; onToggle: () => void; onOpen: () => void
-}) {
+/** The bar along the bottom of every screen but the collection: enough of a
+ *  player to follow the track and move around in it without going back. */
+export function NowPlaying({ player, onOpen }: { player: PlayerState; onOpen: () => void }) {
+  const track = player.current
+  if (!track) return null
   return (
-    <div className="flex shrink-0 items-center gap-3 border-t border-line bg-panel px-4 py-2">
-      <button onClick={onToggle} aria-label={playing ? 'Pause' : 'Play'}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg transition hover:brightness-110">
-        {playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-      </button>
-      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <div className="truncate text-sm font-medium">{title}</div>
-        <div className="truncate text-xs text-muted">{subtitle}</div>
-      </button>
-      <Button variant="ghost" onClick={onOpen}><Disc3 size={15} className={playing ? 'spin' : ''} /></Button>
+    <div className="shrink-0 border-t border-line bg-panel">
+      <div className="flex items-center gap-3 px-4 py-2">
+        <button onClick={player.prev} aria-label="Previous" title="Previous (P)"
+          className="shrink-0 text-muted transition hover:text-fg"><SkipBack size={15} /></button>
+        <button onClick={player.toggle} aria-label={player.playing ? 'Pause' : 'Play'} title="Play / pause (Space)"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg transition hover:brightness-110">
+          {player.playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+        </button>
+        <button onClick={player.next} aria-label="Next" title="Next (N)" disabled={!player.hasNext}
+          className="shrink-0 text-muted transition hover:text-fg disabled:opacity-30"><SkipForward size={15} /></button>
+        <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <div className="truncate text-sm font-medium">{track.title}</div>
+          <div className="truncate text-xs text-muted">{track.artist}</div>
+        </button>
+        <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
+          <SeekBar thin label="Position in the track" disabled={player.duration <= 0}
+            value={player.progress} onChange={(v) => player.seek(v * player.duration)} />
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-muted">
+          {fmtSeconds(player.time)} / {fmtSeconds(player.duration)}
+        </span>
+        <Button variant="ghost" onClick={onOpen} title="Open the turntable">
+          <Disc3 size={15} className={player.playing ? 'spin' : ''} />
+        </Button>
+      </div>
     </div>
   )
 }

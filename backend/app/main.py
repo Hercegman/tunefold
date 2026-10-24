@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import threading
 import time
 import uuid
@@ -89,6 +90,20 @@ class JobIn(BaseModel):
     artist_map: dict[str, str] = Field(default_factory=dict)
     save_aliases: list[AliasIn] = Field(default_factory=list)
     settings: dict = Field(default_factory=dict)
+    collection_id: int | None = None     # file what this job fetches under one of the user's collections
+
+
+class CollectionIn(BaseModel):
+    name: str
+
+
+class FilesIn(BaseModel):
+    files: list[str]
+
+
+class MoveIn(BaseModel):
+    files: list[str]
+    to: int
 
 
 # ---------------------------------------------------------------- jobs
@@ -183,6 +198,14 @@ def _friendly(msg: str) -> str:
     return msg[:300]
 
 
+def _file_under(job: Job, dest: str) -> None:
+    """Add a finished (or already present) track to the collection the user
+    picked for this download, if they picked one."""
+    cid = job.data.collection_id
+    if cid is not None and lib.collection_exists(cid):
+        lib.add_to_collection(cid, [dest])
+
+
 def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate | None = None,
                last_attempt: bool = False) -> None:
     tid = raw["id"]
@@ -212,6 +235,7 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate |
             job.set_track(tid, status="skipped", file=dest, progress=100)
             lib.record(track_id=tid, source=source, playlist_id=pl.get("id"), title=track.title,
                        artist=artist, credit=track.credit, album=track.album, file=dest)
+            _file_under(job, dest)
             return
         if force is not None:
             cand = force
@@ -238,6 +262,7 @@ def _run_track(job: Job, dl: Downloader, pl: dict, raw: dict, force: Candidate |
         os.replace(final, dest)
         lib.record(track_id=tid, source=source, playlist_id=pl.get("id"), title=track.title, artist=artist,
                    credit=track.credit, album=track.album, file=dest)
+        _file_under(job, dest)
         job.set_track(tid, status="done", file=dest, progress=100)
     except Cancelled:
         job.set_track(tid, status="cancelled")
@@ -348,6 +373,73 @@ CHUNK = 256 * 1024
 @app.get("/api/collection")
 def collection():
     return lib.collection()
+
+
+@app.post("/api/tracks/delete")
+def delete_tracks(body: FilesIn):
+    """Delete downloaded files from disk, and from every collection."""
+    return lib.delete_files(body.files)
+
+
+def _collection_name(raw: str) -> str:
+    name = re.sub(r"\s+", " ", raw or "").strip()
+    if not name:
+        raise HTTPException(400, "A collection needs a name.")
+    return name[:80]
+
+
+def _collection(cid: int) -> int:
+    if not lib.collection_exists(cid):
+        raise HTTPException(404, "no such collection")
+    return cid
+
+
+@app.get("/api/collections")
+def collections():
+    return lib.collections()
+
+
+@app.post("/api/collections")
+def create_collection(body: CollectionIn):
+    try:
+        return lib.create_collection(_collection_name(body.name))
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "There is already a collection with that name.") from exc
+
+
+@app.patch("/api/collections/{cid}")
+def rename_collection(cid: int, body: CollectionIn):
+    _collection(cid)
+    try:
+        lib.rename_collection(cid, _collection_name(body.name))
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "There is already a collection with that name.") from exc
+    return {"ok": True}
+
+
+@app.delete("/api/collections/{cid}")
+def delete_collection(cid: int):
+    """Drop the collection itself. The files in it stay where they are."""
+    lib.delete_collection(_collection(cid))
+    return {"ok": True}
+
+
+@app.post("/api/collections/{cid}/add")
+def add_to_collection(cid: int, body: FilesIn):
+    lib.add_to_collection(_collection(cid), body.files)
+    return {"ok": True}
+
+
+@app.post("/api/collections/{cid}/remove")
+def remove_from_collection(cid: int, body: FilesIn):
+    lib.remove_from_collection(_collection(cid), body.files)
+    return {"ok": True}
+
+
+@app.post("/api/collections/{cid}/move")
+def move_between_collections(cid: int, body: MoveIn):
+    lib.move_between(_collection(cid), _collection(body.to), body.files)
+    return {"ok": True}
 
 
 # Files the user opened from the desktop this session. They are not in the
@@ -505,6 +597,8 @@ def create_job(body: JobIn):
     for a in body.save_aliases:
         parts = [p.strip() for p in a.credit.split(", ") if p.strip()]
         lib.save_alias(credit_key(parts), a.credit, a.to)
+    if body.collection_id is not None:
+        _collection(body.collection_id)
     jid = uuid.uuid4().hex[:10]
     job = Job(jid, body, settings)
     JOBS[jid] = job

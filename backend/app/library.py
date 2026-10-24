@@ -1,4 +1,4 @@
-"""SQLite: settings, artist aliases, download history."""
+"""SQLite: settings, artist aliases, download history, collections."""
 from __future__ import annotations
 
 import json
@@ -29,6 +29,21 @@ def data_dir() -> Path:
     return p
 
 
+def _unlink(path: str) -> None:
+    """On Windows a file the player was just streaming can stay locked for a
+    moment after the stream closes, so give it a few tries before giving up."""
+    for attempt in range(5):
+        try:
+            os.remove(path)
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.2)
+
+
 class Library:
     def __init__(self, path: str | None = None):
         self.path = path or str(data_dir() / "library.db")
@@ -51,6 +66,12 @@ class Library:
             CREATE TABLE IF NOT EXISTS track_choices(
                 source TEXT NOT NULL, track_id TEXT NOT NULL, video_id TEXT NOT NULL, title TEXT,
                 duration REAL, created REAL NOT NULL, PRIMARY KEY(source, track_id));
+            CREATE TABLE IF NOT EXISTS collections(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                created REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS collection_items(
+                collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+                file TEXT NOT NULL, added REAL NOT NULL, PRIMARY KEY(collection_id, file));
             """)
             # Tunefold 0.2 knew only Spotify, so rows without a source are Spotify's.
             # Track ids are only unique per source (Deezer and Apple both number theirs).
@@ -148,12 +169,15 @@ class Library:
         rows = self._conn.execute(
             "SELECT track_id, source, title, artist, credit, album, file, created FROM downloads "
             "ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, created").fetchall()
+        member: dict[str, list[int]] = {}
+        for r in self._conn.execute("SELECT collection_id, file FROM collection_items ORDER BY added"):
+            member.setdefault(r["file"], []).append(r["collection_id"])
         out, seen = [], set()
         for r in rows:
             if r["file"] in seen or not os.path.exists(r["file"]):
                 continue
             seen.add(r["file"])
-            out.append(dict(r))
+            out.append({**dict(r), "collections": member.get(r["file"], [])})
         return out
 
     def has_file(self, path: str) -> bool:
@@ -164,6 +188,69 @@ class Library:
     def downloads(self, limit: int = 500) -> list[dict]:
         rows = self._conn.execute("SELECT * FROM downloads ORDER BY created DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+    def delete_files(self, files: list[str]) -> dict:
+        """Delete downloaded files from disk and forget them. Only paths in the
+        download history are touched, so this can never reach anything else."""
+        deleted, failed = [], {}
+        for f in files:
+            if not self.has_file(f):
+                failed[f] = "not in your collection"
+                continue
+            try:
+                _unlink(f)
+            except OSError as exc:
+                failed[f] = str(exc)
+                continue
+            with self._lock, self._conn:
+                self._conn.execute("DELETE FROM downloads WHERE file=?", (f,))
+                self._conn.execute("DELETE FROM collection_items WHERE file=?", (f,))
+            deleted.append(f)
+        return {"deleted": deleted, "failed": failed}
+
+    # collections: the user's own groupings. They point at files and own none
+    # of them - dropping a collection, or a track from one, leaves the file be.
+    def collections(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT c.id, c.name, c.created, COUNT(i.file) AS count FROM collections c "
+            "LEFT JOIN collection_items i ON i.collection_id = c.id "
+            "GROUP BY c.id ORDER BY c.name COLLATE NOCASE").fetchall()
+        return [dict(r) for r in rows]
+
+    def collection_exists(self, cid: int) -> bool:
+        return self._conn.execute("SELECT 1 FROM collections WHERE id=?", (cid,)).fetchone() is not None
+
+    def create_collection(self, name: str) -> dict:
+        now = time.time()
+        with self._lock, self._conn:
+            cur = self._conn.execute("INSERT INTO collections(name, created) VALUES(?,?)", (name, now))
+        return {"id": cur.lastrowid, "name": name, "created": now, "count": 0}
+
+    def rename_collection(self, cid: int, name: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE collections SET name=? WHERE id=?", (name, cid))
+
+    def delete_collection(self, cid: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM collection_items WHERE collection_id=?", (cid,))
+            self._conn.execute("DELETE FROM collections WHERE id=?", (cid,))
+
+    def add_to_collection(self, cid: int, files: list[str]) -> None:
+        now = time.time()
+        with self._lock, self._conn:
+            for f in files:
+                if self._conn.execute("SELECT 1 FROM downloads WHERE file=? LIMIT 1", (f,)).fetchone():
+                    self._conn.execute("INSERT OR IGNORE INTO collection_items VALUES(?,?,?)", (cid, f, now))
+
+    def remove_from_collection(self, cid: int, files: list[str]) -> None:
+        with self._lock, self._conn:
+            self._conn.executemany("DELETE FROM collection_items WHERE collection_id=? AND file=?",
+                                   [(cid, f) for f in files])
+
+    def move_between(self, src: int, dst: int, files: list[str]) -> None:
+        self.add_to_collection(dst, files)
+        if src != dst:
+            self.remove_from_collection(src, files)
 
     # recent
     def touch_recent(self, url: str, **meta) -> None:

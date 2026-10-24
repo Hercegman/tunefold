@@ -28,6 +28,9 @@ export interface PlayerState {
   prev: () => void
   seek: (seconds: number) => void
   stop: () => void
+  /** Take these files out of the queue, e.g. because they were deleted. The
+   *  track on the deck keeps playing unless it is one of them. */
+  drop: (files: string[]) => void
   setVolume: (v: number) => void
   toggleMute: () => void
   toggleShuffle: () => void
@@ -273,6 +276,33 @@ export function usePlayer(): PlayerState {
     setDuration(0)
   }, [media])
 
+  const drop = useCallback((files: string[]) => {
+    const gone = new Set(files)
+    const q = queueRef.current
+    if (!q.some((t) => gone.has(t.file))) return
+    const places = orderRef.current
+    const at = posRef.current
+    const remap = new Map<number, number>()
+    const kept: CollectionTrack[] = []
+    q.forEach((t, i) => { if (!gone.has(t.file)) { remap.set(i, kept.length); kept.push(t) } })
+    const ord = places.filter((i) => remap.has(i)).map((i) => remap.get(i)!)
+    if (!kept.length) { stop(); return }
+    setQueue(kept)
+    setOrder(ord)
+    const playingIdx = at >= 0 ? places[at] : -1
+    if (playingIdx >= 0 && !remap.has(playingIdx)) {
+      // The record on the deck went: play whatever was due after it.
+      const p = places.slice(0, at + 1).filter((i) => remap.has(i)).length
+      if (p < ord.length) start(p, kept, ord)
+      else stop()
+      return
+    }
+    queueRef.current = kept
+    orderRef.current = ord
+    posRef.current = playingIdx >= 0 ? ord.indexOf(remap.get(playingIdx)!) : -1
+    setPos(posRef.current)
+  }, [start, stop])
+
   const setVolume = useCallback((v: number) => {
     const audio = media()
     const clamped = Math.max(0, Math.min(1, v))
@@ -323,7 +353,7 @@ export function usePlayer(): PlayerState {
     current: index >= 0 ? queue[index] ?? null : null,
     progress: duration > 0 ? Math.min(1, time / duration) : 0,
     hasNext: pos >= 0 && (pos + 1 < order.length || repeat !== 'off'),
-    play, toggle, next, prev, seek, stop,
+    play, toggle, next, prev, seek, stop, drop,
     setVolume, toggleMute, toggleShuffle, cycleRepeat,
   }
 }

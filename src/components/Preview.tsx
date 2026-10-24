@@ -1,15 +1,82 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Download, FolderOpen, Loader2, Settings as SettingsIcon } from 'lucide-react'
+import { CheckCircle2, Download, FolderOpen, Library, Loader2, Settings as SettingsIcon } from 'lucide-react'
 import { api, fmtDuration, joinPath } from '../api'
 import { sourceLabel } from '../sources'
-import type { Preview as PreviewT, Settings } from '../types'
+import type { Preview as PreviewT, Settings, UserCollection } from '../types'
 import { ArtistPanel, type Decision } from './ArtistPanel'
-import { BackButton, Badge, Button, Cover } from './ui'
+import { BackButton, Badge, Button, Cover, inputCls } from './ui'
 
 export interface StartPayload {
   track_ids: string[]
   artist_map: Record<string, string>
   save_aliases: { credit: string; to: string }[]
+  /** One of the user's collections to file the downloads under, or none. */
+  collection_id: number | null
+}
+
+const LAST_COLLECTION = 'tunefold.lastCollection'
+
+/** Which of the user's collections the downloads go into. The last one used
+ *  is offered again, since a run of playlists usually goes to the same place. */
+function CollectionPicker({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+  const [list, setList] = useState<UserCollection[] | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.collections().then((l) => {
+      setList(l)
+      let last: number | null = null
+      try { last = Number(localStorage.getItem(LAST_COLLECTION)) || null } catch { /* no storage */ }
+      if (last && l.some((c) => c.id === last)) onChange(last)
+    }).catch(() => setList([]))
+  }, [onChange])
+
+  const pick = (id: number | null) => {
+    onChange(id)
+    try { localStorage.setItem(LAST_COLLECTION, id ? String(id) : '') } catch { /* no storage */ }
+  }
+
+  const create = async () => {
+    setError(null)
+    try {
+      const c = await api.createCollection(name)
+      setList((l) => [...(l || []), c].sort((a, b) => a.name.localeCompare(b.name)))
+      pick(c.id)
+      setAdding(false); setName('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  if (adding) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <form className="flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); void create() }}>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="New collection"
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setAdding(false) } }}
+            className={`${inputCls} w-48 py-1.5`} />
+          <Button type="submit" disabled={!name.trim()} className="py-1.5">Create</Button>
+          <Button type="button" variant="ghost" className="py-1.5" onClick={() => setAdding(false)}>Cancel</Button>
+        </form>
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </div>
+    )
+  }
+
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted">
+      <Library size={13} /> Add to
+      <select value={value ?? ''} disabled={!list}
+        onChange={(e) => e.target.value === 'new' ? setAdding(true) : pick(e.target.value ? Number(e.target.value) : null)}
+        className="rounded-md border border-line bg-bg px-2 py-1 text-xs text-fg focus:border-accent/60 focus:outline-none">
+        <option value="">No collection</option>
+        {list?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <option value="new">+ New collection…</option>
+      </select>
+    </label>
+  )
 }
 
 export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpenJob, onCovers, starting }: {
@@ -29,6 +96,7 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpe
   const [decisions, setDecisions] = useState<Record<string, Decision>>(() =>
     Object.fromEntries(analysis.suggestions.map((s) => [s.id, { accepted: true, to: s.to }])))
   const [remember, setRemember] = useState(true)
+  const [collectionId, setCollectionId] = useState<number | null>(null)
 
   useEffect(() => {
     setSelected(new Set(pl.tracks.filter((t) => !have[t.id]).map((t) => t.id)))
@@ -84,7 +152,10 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpe
         for (const c of credits) if (c !== d.to) save.push({ credit: c, to: d.to })
       }
     }
-    onStart({ track_ids: pl.tracks.filter((t) => selected.has(t.id)).map((t) => t.id), artist_map: artistMap, save_aliases: save })
+    onStart({
+      track_ids: pl.tracks.filter((t) => selected.has(t.id)).map((t) => t.id),
+      artist_map: artistMap, save_aliases: save, collection_id: collectionId,
+    })
   }
 
   const kindLabel = pl.kind === 'album' ? 'Album' : pl.kind === 'track' ? 'Track' : 'Playlist'
@@ -124,6 +195,7 @@ export function Preview({ data, settings, onBack, onStart, onOpenSettings, onOpe
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-accent" />
             Remember artist decisions for future playlists
           </label>
+          <CollectionPicker value={collectionId} onChange={setCollectionId} />
         </div>
       </header>
 

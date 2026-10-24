@@ -1,4 +1,6 @@
-import type { Alias, CollectionTrack, JobSnapshot, OpenedFiles, Preview, Recent, Settings, Stats, YtCandidate } from './types'
+import type {
+  Alias, CollectionTrack, JobSnapshot, OpenedFiles, Preview, Recent, Settings, Stats, UserCollection, YtCandidate,
+} from './types'
 
 export const PORT = 8765
 export const BASE = `http://127.0.0.1:${PORT}`
@@ -27,6 +29,23 @@ export const api = {
   saveSettings: (patch: Partial<Settings>) => req<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   recent: () => req<Recent[]>('/api/recent'),
   collection: () => req<CollectionTrack[]>('/api/collection'),
+  /** Delete downloaded files from disk. */
+  deleteTracks: (files: string[]) =>
+    req<{ deleted: string[]; failed: Record<string, string> }>('/api/tracks/delete', {
+      method: 'POST', body: JSON.stringify({ files }),
+    }),
+  collections: () => req<UserCollection[]>('/api/collections'),
+  createCollection: (name: string) =>
+    req<UserCollection>('/api/collections', { method: 'POST', body: JSON.stringify({ name }) }),
+  renameCollection: (id: number, name: string) =>
+    req<{ ok: boolean }>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteCollection: (id: number) => req<{ ok: boolean }>(`/api/collections/${id}`, { method: 'DELETE' }),
+  addToCollection: (id: number, files: string[]) =>
+    req<{ ok: boolean }>(`/api/collections/${id}/add`, { method: 'POST', body: JSON.stringify({ files }) }),
+  removeFromCollection: (id: number, files: string[]) =>
+    req<{ ok: boolean }>(`/api/collections/${id}/remove`, { method: 'POST', body: JSON.stringify({ files }) }),
+  moveBetweenCollections: (from: number, to: number, files: string[]) =>
+    req<{ ok: boolean }>(`/api/collections/${from}/move`, { method: 'POST', body: JSON.stringify({ files, to }) }),
   /** Hand the backend files opened from the desktop; it describes them and
    *  allows itself to stream them back. */
   external: (paths: string[]) =>

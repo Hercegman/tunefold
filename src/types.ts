@@ -131,6 +131,17 @@ export interface CollectionTrack {
   created: number
   /** Seconds, read from the file's own header; only set for opened files. */
   duration?: number | null
+  /** Ids of the user's collections this file is in; only set for downloads. */
+  collections?: number[]
+}
+
+/** A grouping of downloads the user made themselves. It points at files and
+ *  owns none of them. */
+export interface UserCollection {
+  id: number
+  name: string
+  created: number
+  count: number
 }
 
 /** What the backend makes of a set of files handed over by the desktop. */
